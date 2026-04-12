@@ -1,0 +1,69 @@
+{
+  "name": "senior",
+  "productName": "Senior",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Local-first AI requirement and task orchestrator desktop app.",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zhihuiio/senior.git"
+  },
+  "homepage": "https://github.com/zhihuiio/senior#readme",
+  "bugs": {
+    "url": "https://github.com/zhihuiio/senior/issues"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "files": [
+    "out/",
+    "src/",
+    "resources/",
+    "docs/",
+    "README.md",
+    "LICENSE",
+    "electron.vite.config.ts",
+    "postcss.config.cjs",
+    "tailwind.config.ts",
+    "tsconfig.json",
+    "components.json"
+  ],
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "test:freeform-agent": "node --test tests/main/agents/freeform-agent.test.cjs",
+    "postinstall": "electron-rebuild -f -w better-sqlite3"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.92",
+    "better-sqlite3": "^12.8.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "electron": "^41.1.1",
+    "lucide-react": "^1.7.0",
+    "pngjs": "^7.0.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@swc/core": "^1.15.24",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.5.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.0",
+    "autoprefixer": "^10.4.27",
+    "electron-rebuild": "^3.2.9",
+    "electron-vite": "^5.0.0",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^6.0.2",
+    "vite": "^7.3.2"
+  }
+}

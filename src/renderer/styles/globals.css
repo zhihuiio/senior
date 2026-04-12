@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 12px;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  :where(
+      button,
+      [role='button'],
+      a[href],
+      input,
+      select,
+      textarea,
+      [tabindex]:not([tabindex='-1'])
+    ):focus {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  :where(
+      button,
+      [role='button'],
+      a[href],
+      input,
+      select,
+      textarea,
+      [tabindex]:not([tabindex='-1'])
+    ):focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+}
+
+@layer utilities {
+  @keyframes dot-scale-pulse {
+    0%,
+    80%,
+    100% {
+      transform: scale(0.55);
+      opacity: 0.5;
+    }
+
+    40% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  .dot-scale-loader {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .dot-scale-loader > span {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 9999px;
+    background-color: rgb(71 85 105);
+    animation: dot-scale-pulse 1s infinite ease-in-out;
+  }
+
+  .dot-scale-loader > span:nth-child(2) {
+    animation-delay: 0.12s;
+  }
+
+  .dot-scale-loader > span:nth-child(3) {
+    animation-delay: 0.24s;
+  }
+
+  .drag-region {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+}
