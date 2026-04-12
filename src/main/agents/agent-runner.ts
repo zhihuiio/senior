@@ -64,6 +64,7 @@ export async function runAgentQuery(input: RunAgentQueryInput): Promise<AgentRun
     prompt: input.prompt,
     options: {
       cwd: input.cwd ?? process.cwd(),
+      settingSources: ['user', 'project'],
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
       ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : {}),
