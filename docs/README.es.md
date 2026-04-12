@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="../resources/senior_v2.png" alt="Senior Logo" width="120" height="120">
+<img src="../src/renderer/assets/senior-logo.png" alt="Senior Logo" >
 
 # Senior
 
@@ -19,19 +19,11 @@ Desde evaluación de requisitos hasta diseño de PRD, revisión técnica, codifi
 
 [Instalación](#instalación) · [Inicio rápido](#inicio-rápido) · [Cómo funciona](#cómo-funciona) · [Contribuir](#contribuir)
 
+[Guía de contribución](../CONTRIBUTING.md) · [Política de seguridad](../SECURITY.md)
+
 **[English](../README.md)** | **[简体中文](./README.zh-CN.md)** | **[繁體中文](./README.zh-TW.md)** | **[Deutsch](./README.de.md)** | **[Français](./README.fr.md)** | **[日本語](./README.ja.md)**
 
 </div>
-
----
-
-<div align="center">
-
-![Senior Screenshot](../resources/senior_v2.png)
-
-</div>
-
----
 
 ## Capturas de pantalla
 
@@ -63,24 +55,30 @@ Senior está pensado para equipos que necesitan ejecución con IA y control de p
 <td width="50%">
 
 ### Pipeline de requisitos
+
 Evalúa automáticamente la razonabilidad del requisito, genera borradores PRD, revisa calidad y encola tareas ejecutables.
 
 ### Bucle de orquestación de tareas
+
 Ejecuta diseño de arquitectura, revisión técnica, codificación, revisión QA y guía de despliegue como flujo por etapas.
 
 ### Compuertas Human-in-the-Loop
+
 Cuando una etapa requiere contexto humano, Senior pausa y admite respuestas estructuradas antes de continuar.
 
 </td>
 <td width="50%">
 
 ### Trazas y línea de tiempo por etapa
+
 Inspecciona runs por etapa (rondas, duración, estado) y trazas detalladas de agente/herramientas para cada run.
 
 ### Carril de artefactos
+
 Cada etapa persiste artefactos (por ejemplo `arch_design.md`, `tech_review.json`, `code.md`, `qa.json`, `deploy.md`).
 
 ### Almacenamiento local-first
+
 Metadatos de proyecto, estados de requisitos/tareas y runs de etapa se guardan en SQLite local con evolución automática de esquema.
 
 </td>

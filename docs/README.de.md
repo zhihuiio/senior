@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="../resources/senior_v2.png" alt="Senior Logo" width="120" height="120">
+<img src="../src/renderer/assets/senior-logo.png" alt="Senior Logo" >
 
 # Senior
 
@@ -19,19 +19,11 @@ Von Anforderungsbewertung über PRD-Design, technisches Review, Coding, QA bis z
 
 [Installation](#installation) · [Schnellstart](#schnellstart) · [Funktionsweise](#funktionsweise) · [Beitragen](#beitragen)
 
+[Beitragsleitfaden](../CONTRIBUTING.md) · [Sicherheitsrichtlinie](../SECURITY.md)
+
 **[English](../README.md)** | **[简体中文](./README.zh-CN.md)** | **[繁體中文](./README.zh-TW.md)** | **[Español](./README.es.md)** | **[Français](./README.fr.md)** | **[日本語](./README.ja.md)**
 
 </div>
-
----
-
-<div align="center">
-
-![Senior Screenshot](../resources/senior_v2.png)
-
-</div>
-
----
 
 ## Screenshots
 
@@ -63,24 +55,30 @@ Senior ist für Teams gebaut, die AI-Ausführung mit Prozesskontrolle brauchen, 
 <td width="50%">
 
 ### Requirement-Pipeline
+
 Automatische Bewertung der Plausibilität, Erstellung von PRD-Entwürfen, Qualitätsreview und Queueing ausführbarer Tasks.
 
 ### Task-Orchestrierungsloop
+
 Ausführung von Architekturdesign, technischem Review, Coding, QA-Review und Deployment-Hinweisen als stage-getriebener Flow.
 
 ### Human-in-the-Loop Gates
+
 Wenn eine Phase menschlichen Kontext benötigt, pausiert Senior und setzt nach strukturierter Antwort fort.
 
 </td>
 <td width="50%">
 
 ### Stage-Trace & Timeline
+
 Inspektion pro Stage-Run (Runden, Dauer, Status) sowie detaillierter Agent/Tool-Traces je Task-Stage-Run.
 
 ### Artefakt-Leiste
+
 Jede Stage persistiert Artefakte (z. B. `arch_design.md`, `tech_review.json`, `code.md`, `qa.json`, `deploy.md`).
 
 ### Local-First Storage
+
 Projektmetadaten, Requirement/Task-States und Stage-Runs liegen in lokaler SQLite mit automatischer Schema-Evolution.
 
 </td>

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="../resources/senior_v2.png" alt="Senior Logo" width="120" height="120">
+<img src="../src/renderer/assets/senior-logo.png" alt="Senior Logo" >
 
 # Senior
 
@@ -19,19 +19,11 @@ De l’évaluation d’exigences à la conception PRD, revue technique, dévelop
 
 [Installation](#installation) · [Démarrage rapide](#démarrage-rapide) · [Fonctionnement](#fonctionnement) · [Contribuer](#contribuer)
 
+[Guide de contribution](../CONTRIBUTING.md) · [Politique de sécurité](../SECURITY.md)
+
 **[English](../README.md)** | **[简体中文](./README.zh-CN.md)** | **[繁體中文](./README.zh-TW.md)** | **[Español](./README.es.md)** | **[Deutsch](./README.de.md)** | **[日本語](./README.ja.md)**
 
 </div>
-
----
-
-<div align="center">
-
-![Senior Screenshot](../resources/senior_v2.png)
-
-</div>
-
----
 
 ## Captures d’écran
 
@@ -63,24 +55,30 @@ Senior est conçu pour les équipes qui veulent l’exécution IA avec contrôle
 <td width="50%">
 
 ### Pipeline d’exigences
+
 Évalue automatiquement la pertinence d’une exigence, génère des brouillons PRD, effectue la revue qualité et met en file les tâches exécutables.
 
 ### Boucle d’orchestration des tâches
+
 Exécute conception d’architecture, revue technique, développement, revue QA et consignes de déploiement via un flux par étapes.
 
 ### Gates Human-in-the-Loop
+
 Quand une étape nécessite un contexte humain, Senior met en pause et reprend après une réponse structurée.
 
 </td>
 <td width="50%">
 
 ### Traces et timeline par étape
+
 Inspectez les runs d’étape (rounds, durée, statut) et les traces détaillées agent/outils de chaque run.
 
 ### Rail d’artefacts
+
 Chaque étape persiste des artefacts (ex. `arch_design.md`, `tech_review.json`, `code.md`, `qa.json`, `deploy.md`).
 
 ### Stockage local-first
+
 Métadonnées projet, états exigences/tâches et runs d’étapes sont stockés en SQLite locale avec évolution automatique du schéma.
 
 </td>

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./resources/senior_v2.png" alt="Senior Logo" width="120" height="120">
+<img src="./src/renderer/assets/senior-logo.png" alt="Senior Logo" >
 
 # Senior
 
@@ -22,14 +22,6 @@ From requirement evaluation to PRD design, technical review, coding, QA, and dep
 [Contributing Guide](./CONTRIBUTING.md) · [Security Policy](./SECURITY.md)
 
 **[简体中文](./docs/README.zh-CN.md)** | **[繁體中文](./docs/README.zh-TW.md)** | **[Español](./docs/README.es.md)** | **[Deutsch](./docs/README.de.md)** | **[Français](./docs/README.fr.md)** | **[日本語](./docs/README.ja.md)**
-
-</div>
-
----
-
-<div align="center">
-
-![Senior Screenshot](./resources/senior_v2.png)
 
 </div>
 
@@ -65,24 +57,30 @@ Senior is built for teams that want AI execution with process control, not just 
 <td width="50%">
 
 ### Requirement Pipeline
+
 Automatically evaluate requirement reasonability, generate PRD drafts, review quality, and enqueue deliverable tasks.
 
 ### Task Orchestration Loop
+
 Run architecture design, technical review, coding, QA review, and deployment guidance as a stage-driven flow.
 
 ### Human-in-the-Loop Gates
+
 When a stage blocks on review context, Senior pauses and supports structured human replies before continuing.
 
 </td>
 <td width="50%">
 
 ### Stage Trace & Timeline
+
 Inspect per-stage runs (rounds, durations, status) and detailed agent/tool traces for each task stage run.
 
 ### Artifact Rail
+
 Each stage persists artifacts (for example `arch_design.md`, `tech_review.json`, `code.md`, `qa.json`, `deploy.md`).
 
 ### Local-First Storage
+
 Project metadata, requirement/task states, and stage runs are stored in local SQLite with automatic schema evolution.
 
 </td>
