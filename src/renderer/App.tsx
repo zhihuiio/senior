@@ -1355,6 +1355,8 @@ function Workspace({
 
     return filteredTasks.find((task) => task.id === activeTaskId) ?? null
   }, [activeTaskId, filteredTasks])
+  const selectedTaskId = selectedTask?.id ?? null
+  const selectedTaskWaitingContext = selectedTask?.waitingContext ?? null
   const isTaskDetailMode = activeListType === 'task' && Boolean(selectedTask)
   const hasRunningStageCard = useMemo(() => {
     if (!selectedTask) {
@@ -1533,10 +1535,10 @@ function Workspace({
 
   useEffect(() => {
     if (
-      !selectedTask ||
-      !isTaskInWaitingHumanGate(selectedTask.waitingContext) ||
+      !selectedTaskId ||
+      !isTaskInWaitingHumanGate(selectedTaskWaitingContext) ||
       !taskStageTraceModal.open ||
-      taskStageTraceModal.taskId !== selectedTask.id
+      taskStageTraceModal.taskId !== selectedTaskId
     ) {
       return
     }
@@ -1545,7 +1547,7 @@ function Workspace({
     setTaskHumanConversationLoading(true)
     setTaskHumanConversationError('')
 
-    void loadTaskHumanConversation(selectedTask.id)
+    void loadTaskHumanConversation(selectedTaskId)
       .then((data) => {
         if (cancelled) {
           return
@@ -1553,7 +1555,7 @@ function Workspace({
 
         setTaskHumanMessagesByTaskId((prev) => ({
           ...prev,
-          [selectedTask.id]: data.messages
+          [selectedTaskId]: data.messages
         }))
       })
       .catch((error) => {
@@ -1573,7 +1575,7 @@ function Workspace({
     return () => {
       cancelled = true
     }
-  }, [loadTaskHumanConversation, selectedTask, taskStageTraceModal.open, taskStageTraceModal.taskId])
+  }, [loadTaskHumanConversation, selectedTaskId, selectedTaskWaitingContext, taskStageTraceModal.open, taskStageTraceModal.taskId])
 
   useEffect(() => {
     if (!hasRunningStageCard) {
