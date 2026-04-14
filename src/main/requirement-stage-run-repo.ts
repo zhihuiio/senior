@@ -10,6 +10,7 @@ import {
   updateStageRunAgentSessionId,
   updateStageRunAgentTrace
 } from './stage-run-repo'
+import { emitRequirementStageRunChanged } from './requirement-stage-run-events'
 
 function toRequirementStageRun(row: StageRun): RequirementStageRun {
   return {
@@ -50,7 +51,13 @@ export function startRequirementStageRun(input: {
     entityId: input.requirementId,
     stageKey: input.stageKey
   })
-  return toRequirementStageRun(row)
+  const stageRun = toRequirementStageRun(row)
+  emitRequirementStageRunChanged({
+    requirementId: stageRun.requirementId,
+    stageRunId: stageRun.id,
+    stageKey: stageRun.stageKey
+  })
+  return stageRun
 }
 
 export function finishRequirementStageRun(input: {
@@ -71,7 +78,13 @@ export function finishRequirementStageRun(input: {
   if (!row) {
     return null
   }
-  return toRequirementStageRun(row)
+  const stageRun = toRequirementStageRun(row)
+  emitRequirementStageRunChanged({
+    requirementId: stageRun.requirementId,
+    stageRunId: stageRun.id,
+    stageKey: stageRun.stageKey
+  })
+  return stageRun
 }
 
 export function hasOpenRequirementStageRun(input: {
@@ -105,7 +118,13 @@ export function updateRequirementStageRunAgentTrace(input: {
   if (!row || row.entityType !== 'requirement') {
     return null
   }
-  return toRequirementStageRun(row)
+  const stageRun = toRequirementStageRun(row)
+  emitRequirementStageRunChanged({
+    requirementId: stageRun.requirementId,
+    stageRunId: stageRun.id,
+    stageKey: stageRun.stageKey
+  })
+  return stageRun
 }
 
 export function updateRequirementStageRunAgentSessionId(input: {
@@ -116,7 +135,13 @@ export function updateRequirementStageRunAgentSessionId(input: {
   if (!row || row.entityType !== 'requirement') {
     return null
   }
-  return toRequirementStageRun(row)
+  const stageRun = toRequirementStageRun(row)
+  emitRequirementStageRunChanged({
+    requirementId: stageRun.requirementId,
+    stageRunId: stageRun.id,
+    stageKey: stageRun.stageKey
+  })
+  return stageRun
 }
 
 export function failAllRunningRequirementStageRuns(failureReason: string): number {

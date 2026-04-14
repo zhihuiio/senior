@@ -1,4 +1,4 @@
-import type { Requirement, RequirementConversationMessage, RequirementStageRun, RequirementStatus, RequirementTransitionAction } from '../../shared/types'
+import type { Requirement, RequirementConversationMessage, RequirementStageRun, RequirementStatus, RequirementTransitionAction, TaskAgentTraceMessage } from '../../shared/types'
 import { pickText } from '../i18n'
 
 export interface AutoProcessorStatusData {
@@ -54,6 +54,10 @@ export interface ProcessRequirementRequest {
 
 export interface ListRequirementStageRunsRequest {
   requirementId: number
+}
+
+export interface GetRequirementStageRunTraceRequest {
+  stageRunId: number
 }
 
 
@@ -164,6 +168,21 @@ export async function listRequirementStageRuns(req: ListRequirementStageRunsRequ
   }
 
   return res.data.stageRuns
+}
+
+export async function getRequirementStageRunTrace(
+  req: GetRequirementStageRunTraceRequest
+): Promise<{ stageRun: RequirementStageRun; messages: TaskAgentTraceMessage[] }> {
+  const res = await window.api.getRequirementStageRunTrace(req)
+
+  if (!res.ok) {
+    throw new Error(res.error.message)
+  }
+
+  return {
+    stageRun: res.data.stageRun,
+    messages: res.data.messages
+  }
 }
 
 export const REQUIREMENT_STATUS_LABEL: Record<RequirementStatus, string> = {

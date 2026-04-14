@@ -32,7 +32,7 @@ import { useProjectState } from './hooks/useProjectState'
 import type { RequirementStatusFilter, TaskStatusFilter } from './hooks/useProjectState'
 import { useI18n, pickText } from './i18n'
 import { revealProjectInFinder } from './services/project-service'
-import { listRequirementStageRuns } from './services/requirement-service'
+import { getRequirementStageRunTrace, listRequirementStageRuns, processRequirement as processRequirementService } from './services/requirement-service'
 import { getTaskStageRunTrace, listTaskArtifacts, listTaskStageRuns, readTaskArtifact } from './services/task-service'
 import type { TaskArtifactFile } from '../shared/ipc'
 import type {
@@ -225,6 +225,7 @@ interface RequirementFlowCardItem {
   resultStatus: 'pending' | 'running' | 'succeeded' | 'failed' | 'waiting_human'
   failureReason: string
   durationText: string
+  agentSessionId: string | null
 }
 
 interface OverviewMetricCard {
@@ -269,6 +270,19 @@ interface TaskTraceDisplayItem {
   message?: TaskAgentTraceMessage
   toolUse?: TaskAgentTraceMessage
   toolResult?: TaskAgentTraceMessage | null
+}
+
+interface RequirementStageTraceModalState {
+  open: boolean
+  stageRunId: number | null
+  requirementId: number | null
+  agentSessionId: string | null
+  humanMode: boolean
+  stageLabel: string
+  round: number
+  loading: boolean
+  error: string
+  messages: TaskAgentTraceMessage[]
 }
 
 function getTaskTraceRoleLabel(role: TaskAgentTraceMessage['role']): string {
@@ -1092,6 +1106,7 @@ interface WorkspaceProps {
   loadRequirementConversation: ReturnType<typeof useProjectState>['loadRequirementConversation']
   getClarifyMessages: ReturnType<typeof useProjectState>['getClarifyMessages']
   clearClarifyMessages: ReturnType<typeof useProjectState>['clearClarifyMessages']
+  saveRequirement: ReturnType<typeof useProjectState>['saveRequirement']
   applyTaskCommand: ReturnType<typeof useProjectState>['applyTaskCommand']
   loadTaskHumanConversation: ReturnType<typeof useProjectState>['loadTaskHumanConversation']
   sendTaskHumanConversation: ReturnType<typeof useProjectState>['sendTaskHumanConversation']
@@ -1131,6 +1146,7 @@ function Workspace({
   loadRequirementConversation,
   getClarifyMessages,
   clearClarifyMessages,
+  saveRequirement,
   applyTaskCommand,
   loadTaskHumanConversation,
   sendTaskHumanConversation,
@@ -1201,6 +1217,18 @@ function Workspace({
     error: '',
     messages: []
   })
+  const [requirementStageTraceModal, setRequirementStageTraceModal] = useState<RequirementStageTraceModalState>({
+    open: false,
+    stageRunId: null,
+    requirementId: null,
+    agentSessionId: null,
+    humanMode: false,
+    stageLabel: '',
+    round: 1,
+    loading: false,
+    error: '',
+    messages: []
+  })
   const [taskTraceDetailModal, setTaskTraceDetailModal] = useState<TaskTraceDetailModalState>({
     open: false,
     title: '',
@@ -1211,6 +1239,10 @@ function Workspace({
   const [taskHumanInput, setTaskHumanInput] = useState('')
   const [taskHumanConversationLoading, setTaskHumanConversationLoading] = useState(false)
   const [taskHumanConversationError, setTaskHumanConversationError] = useState('')
+  const [requirementHumanMessagesByRequirementId, setRequirementHumanMessagesByRequirementId] = useState<Record<number, TaskAgentTraceMessage[]>>({})
+  const [requirementHumanInput, setRequirementHumanInput] = useState('')
+  const [requirementHumanConversationLoading, setRequirementHumanConversationLoading] = useState(false)
+  const [requirementHumanConversationError, setRequirementHumanConversationError] = useState('')
 
   const refreshTaskTimelineData = useCallback(async (taskId: number) => {
     const [files, stageRuns] = await Promise.all([listTaskArtifacts(taskId), listTaskStageRuns({ taskId })])
@@ -1221,6 +1253,14 @@ function Workspace({
     setTaskStageRunsByTaskId((prev) => ({
       ...prev,
       [taskId]: stageRuns
+    }))
+  }, [])
+
+  const refreshRequirementTimelineData = useCallback(async (requirementId: number) => {
+    const stageRuns = await listRequirementStageRuns({ requirementId })
+    setRequirementStageRunsByRequirementId((prev) => ({
+      ...prev,
+      [requirementId]: stageRuns
     }))
   }, [])
 
@@ -1257,6 +1297,52 @@ function Workspace({
       const message = error instanceof Error ? error.message : pickText('读取阶段执行详情失败', 'Failed to load stage trace details')
       const waitingSession = message.includes('no available session id') || message.includes('没有可用的 session id')
       setTaskStageTraceModal((prev) => {
+        if (prev.stageRunId !== stageRunId) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          loading: false,
+          error: waitingSession ? pickText('会话建立中，自动刷新中...', 'Session is being established, auto-refreshing...') : message
+        }
+      })
+    }
+  }, [])
+
+  const refreshRequirementStageTrace = useCallback(async (stageRunId: number, silent = false) => {
+    if (!silent) {
+      setRequirementStageTraceModal((prev) => {
+        if (prev.stageRunId !== stageRunId) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          loading: true,
+          error: ''
+        }
+      })
+    }
+
+    try {
+      const trace = await getRequirementStageRunTrace({ stageRunId })
+      setRequirementStageTraceModal((prev) => {
+        if (prev.stageRunId !== stageRunId) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          loading: false,
+          error: '',
+          messages: trace.messages
+        }
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : pickText('读取阶段执行详情失败', 'Failed to load stage trace details')
+      const waitingSession = message.includes('no available session id') || message.includes('没有可用的 session id')
+      setRequirementStageTraceModal((prev) => {
         if (prev.stageRunId !== stageRunId) {
           return prev
         }
@@ -1396,6 +1482,12 @@ function Workspace({
   }, [activeListType])
 
   useEffect(() => {
+    if (activeListType !== 'requirement') {
+      closeRequirementStageTraceModal()
+    }
+  }, [activeListType])
+
+  useEffect(() => {
     if (!selectedTask) {
       return
     }
@@ -1445,13 +1537,7 @@ function Workspace({
 
     const run = async () => {
       try {
-        const stageRuns = await listRequirementStageRuns({ requirementId: selectedRequirement.id })
-        if (!cancelled) {
-          setRequirementStageRunsByRequirementId((prev) => ({
-            ...prev,
-            [selectedRequirement.id]: stageRuns
-          }))
-        }
+        await refreshRequirementTimelineData(selectedRequirement.id)
       } catch {
         if (!cancelled) {
           setRequirementStageRunsByRequirementId((prev) => ({
@@ -1467,7 +1553,76 @@ function Workspace({
     return () => {
       cancelled = true
     }
-  }, [selectedRequirement?.id, selectedRequirement?.updatedAt])
+  }, [refreshRequirementTimelineData, selectedRequirement?.id, selectedRequirement?.updatedAt])
+
+  useEffect(() => {
+    if (!selectedRequirement || !window.api || typeof window.api.onRequirementStageRunChanged !== 'function') {
+      return
+    }
+
+    let inFlight = false
+    let pending = false
+
+    const refresh = () => {
+      if (inFlight) {
+        pending = true
+        return
+      }
+
+      inFlight = true
+      void refreshRequirementTimelineData(selectedRequirement.id)
+        .catch(() => {
+          // ignore push-refresh errors; fallback to existing state
+        })
+        .finally(() => {
+          inFlight = false
+          if (pending) {
+            pending = false
+            refresh()
+          }
+        })
+    }
+
+    const unsubscribe = window.api.onRequirementStageRunChanged((event) => {
+      if (event.requirementId !== selectedRequirement.id) {
+        return
+      }
+
+      refresh()
+    })
+
+    return () => {
+      unsubscribe()
+    }
+  }, [refreshRequirementTimelineData, selectedRequirement?.id])
+
+  useEffect(() => {
+    if (!selectedRequirement || !requirementStageTraceModal.open || requirementStageTraceModal.stageRunId === null) {
+      return
+    }
+
+    if (!window.api || typeof window.api.onRequirementStageRunChanged !== 'function') {
+      return
+    }
+
+    const stageRunId = requirementStageTraceModal.stageRunId
+    const unsubscribe = window.api.onRequirementStageRunChanged((event) => {
+      if (event.requirementId !== selectedRequirement.id || event.stageRunId !== stageRunId) {
+        return
+      }
+
+      void refreshRequirementStageTrace(stageRunId, true)
+    })
+
+    return () => {
+      unsubscribe()
+    }
+  }, [
+    refreshRequirementStageTrace,
+    requirementStageTraceModal.open,
+    requirementStageTraceModal.stageRunId,
+    selectedRequirement?.id
+  ])
 
   useEffect(() => {
     if (!selectedTask || !window.api || typeof window.api.onTaskStageTraceChanged !== 'function') {
@@ -1916,19 +2071,20 @@ function Workspace({
       const stageTitle = run.round > 1 ? t(`${stageLabel}（第${run.round}轮）`, `${stageLabel} (Round ${run.round})`) : stageLabel
       const endAt = run.endAt
       const duration = (endAt ?? requirementDurationNowMs) - run.startAt
-      return {
-        id: `${run.stageKey}-${run.round}-${run.id}`,
-        stageRunId: run.id,
-        stageKey: run.stageKey,
-        stageLabel: stageTitle,
-        round: run.round,
-        startAt: run.startAt,
-        endAt,
-        resultStatus: run.resultStatus,
-        failureReason: run.failureReason,
-        durationText: formatDurationMs(duration)
-      }
-    })
+        return {
+          id: `${run.stageKey}-${run.round}-${run.id}`,
+          stageRunId: run.id,
+          stageKey: run.stageKey,
+          stageLabel: stageTitle,
+          round: run.round,
+          startAt: run.startAt,
+          endAt,
+          resultStatus: run.resultStatus,
+          failureReason: run.failureReason,
+          durationText: formatDurationMs(duration),
+          agentSessionId: run.agentSessionId
+        }
+      })
   }, [requirementDurationNowMs, requirementStageRunsByRequirementId, selectedRequirement])
   const taskFlowStageCards = useMemo<StageFlowCardViewModel[]>(
     () =>
@@ -1980,6 +2136,28 @@ function Workspace({
     return taskStageTraceModal.messages
   }, [selectedTaskHumanMessages, taskStageTraceModal.messages, taskTraceIsWaitingHumanMode])
   const taskStageTraceDisplayItems = useMemo(() => buildTaskTraceDisplayItems(taskTraceMessages), [taskTraceMessages])
+  const selectedRequirementHumanMessages = useMemo(() => {
+    if (!selectedRequirement) {
+      return []
+    }
+
+    return requirementHumanMessagesByRequirementId[selectedRequirement.id] ?? []
+  }, [requirementHumanMessagesByRequirementId, selectedRequirement])
+  const requirementTraceIsWaitingHumanMode = useMemo(() => {
+    if (!selectedRequirement || selectedRequirement.waitingContext !== 'prd_review_gate') {
+      return false
+    }
+
+    return requirementStageTraceModal.open && requirementStageTraceModal.requirementId === selectedRequirement.id && requirementStageTraceModal.humanMode
+  }, [requirementStageTraceModal.humanMode, requirementStageTraceModal.open, requirementStageTraceModal.requirementId, selectedRequirement])
+  const requirementTraceMessages = useMemo(() => {
+    if (requirementTraceIsWaitingHumanMode && selectedRequirementHumanMessages.length > 0) {
+      return selectedRequirementHumanMessages
+    }
+
+    return requirementStageTraceModal.messages
+  }, [requirementStageTraceModal.messages, requirementTraceIsWaitingHumanMode, selectedRequirementHumanMessages])
+  const requirementStageTraceDisplayItems = useMemo(() => buildTaskTraceDisplayItems(requirementTraceMessages), [requirementTraceMessages])
   const taskTraceHasAssistantMessage = useMemo(() => taskTraceMessages.some((message) => message.role === 'assistant'), [taskTraceMessages])
   const taskTraceHasPendingToolCall = useMemo(
     () => taskStageTraceDisplayItems.some((item) => item.kind === 'paired_tool' && !item.toolResult),
@@ -1989,6 +2167,18 @@ function Workspace({
     taskStageTraceModal.open &&
     !taskStageTraceModal.error &&
     (taskStageTraceModal.loading || (!taskTraceHasAssistantMessage && taskTraceHasPendingToolCall))
+  const requirementTraceHasAssistantMessage = useMemo(
+    () => requirementTraceMessages.some((message) => message.role === 'assistant'),
+    [requirementTraceMessages]
+  )
+  const requirementTraceHasPendingToolCall = useMemo(
+    () => requirementStageTraceDisplayItems.some((item) => item.kind === 'paired_tool' && !item.toolResult),
+    [requirementStageTraceDisplayItems]
+  )
+  const shouldShowRequirementTraceToolWaitingDots =
+    requirementStageTraceModal.open &&
+    !requirementStageTraceModal.error &&
+    (requirementStageTraceModal.loading || (!requirementTraceHasAssistantMessage && requirementTraceHasPendingToolCall))
 
   const openRequirementDetail = (requirementId: number) => {
     if (activeListType !== 'requirement') {
@@ -2109,6 +2299,14 @@ function Workspace({
     scrollTaskStageTraceMessagesToBottom()
   }, [taskStageTraceModal.open, taskStageTraceModal.messages, taskStageTraceModal.loading, taskStageTraceModal.error])
 
+  useEffect(() => {
+    if (!requirementStageTraceModal.open) {
+      return
+    }
+
+    scrollTaskStageTraceMessagesToBottom()
+  }, [requirementStageTraceModal.open, requirementStageTraceModal.messages, requirementStageTraceModal.loading, requirementStageTraceModal.error])
+
   const closeTaskStageTraceModal = () => {
     setTaskStageTraceModal({
       open: false,
@@ -2121,6 +2319,29 @@ function Workspace({
       error: '',
       messages: []
     })
+    setTaskTraceDetailModal({
+      open: false,
+      title: '',
+      subtitle: '',
+      content: ''
+    })
+  }
+
+  const closeRequirementStageTraceModal = () => {
+    setRequirementStageTraceModal({
+      open: false,
+      stageRunId: null,
+      requirementId: null,
+      agentSessionId: null,
+      humanMode: false,
+      stageLabel: '',
+      round: 1,
+      loading: false,
+      error: '',
+      messages: []
+    })
+    setRequirementHumanInput('')
+    setRequirementHumanConversationError('')
     setTaskTraceDetailModal({
       open: false,
       title: '',
@@ -2160,6 +2381,22 @@ function Workspace({
       messages: []
     })
     void refreshTaskStageTrace(card.stageRunId)
+  }
+
+  const onOpenRequirementStageTraceModal = (card: RequirementFlowCardItem) => {
+    setRequirementStageTraceModal({
+      open: true,
+      stageRunId: card.stageRunId,
+      requirementId: selectedRequirement?.id ?? null,
+      agentSessionId: card.agentSessionId,
+      humanMode: card.resultStatus === 'waiting_human',
+      stageLabel: card.stageLabel,
+      round: card.round,
+      loading: true,
+      error: '',
+      messages: []
+    })
+    void refreshRequirementStageTrace(card.stageRunId)
   }
 
   const onPreviewTaskArtifact = async (taskId: number, fileName: string) => {
@@ -2222,6 +2459,117 @@ function Workspace({
       setTaskHumanConversationError(error instanceof Error ? error.message : pickText('确认流转失败', 'Failed to confirm transition'))
     } finally {
       setTaskHumanConversationLoading(false)
+    }
+  }
+
+  const loadRequirementHumanConversation = useCallback(
+    async (requirementId: number, sessionId?: string) => {
+      const normalizedSessionId = sessionId?.trim()
+      if (!normalizedSessionId) {
+        return
+      }
+
+      setRequirementHumanConversationLoading(true)
+      setRequirementHumanConversationError('')
+      try {
+        const data = await loadRequirementConversation(requirementId, normalizedSessionId)
+        const converted: TaskAgentTraceMessage[] = data.messages.map((message) => ({
+          id: message.id,
+          role: message.role === 'assistant' ? 'assistant' : message.role === 'user' ? 'user' : 'system',
+          messageType: 'text',
+          content: message.content
+        }))
+        setRequirementHumanMessagesByRequirementId((prev) => ({
+          ...prev,
+          [requirementId]: converted
+        }))
+      } catch (error) {
+        setRequirementHumanConversationError(error instanceof Error ? error.message : pickText('读取人工会话失败', 'Failed to load human conversation'))
+      } finally {
+        setRequirementHumanConversationLoading(false)
+      }
+    },
+    [loadRequirementConversation]
+  )
+
+  useEffect(() => {
+    if (
+      !selectedRequirement ||
+      selectedRequirement.waitingContext !== 'prd_review_gate' ||
+      !requirementStageTraceModal.open ||
+      !requirementStageTraceModal.humanMode ||
+      requirementStageTraceModal.requirementId !== selectedRequirement.id
+    ) {
+      return
+    }
+
+    void loadRequirementHumanConversation(selectedRequirement.id, requirementStageTraceModal.agentSessionId ?? undefined)
+  }, [
+    loadRequirementHumanConversation,
+    requirementStageTraceModal.agentSessionId,
+    requirementStageTraceModal.humanMode,
+    requirementStageTraceModal.open,
+    requirementStageTraceModal.requirementId,
+    selectedRequirement
+  ])
+
+  const onSendRequirementHumanConversation = async () => {
+    if (!selectedRequirement || selectedRequirement.waitingContext !== 'prd_review_gate') {
+      return
+    }
+
+    const message = requirementHumanInput.trim()
+    if (!message) {
+      return
+    }
+
+    setRequirementHumanConversationLoading(true)
+    setRequirementHumanConversationError('')
+    try {
+      const data = await clarifyRequirement(selectedRequirement.id, message)
+      const converted: TaskAgentTraceMessage[] = data.messages.map((item) => ({
+        id: item.id,
+        role: item.role === 'assistant' ? 'assistant' : item.role === 'user' ? 'user' : 'system',
+        messageType: 'text',
+        content: item.content
+      }))
+      setRequirementHumanMessagesByRequirementId((prev) => ({
+        ...prev,
+        [selectedRequirement.id]: converted
+      }))
+      setRequirementHumanInput('')
+    } catch (error) {
+      setRequirementHumanConversationError(error instanceof Error ? error.message : pickText('人工会话回复失败', 'Failed to reply in human conversation'))
+    } finally {
+      setRequirementHumanConversationLoading(false)
+    }
+  }
+
+  const onConfirmRequirementHuman = async () => {
+    if (!selectedRequirement || selectedRequirement.waitingContext !== 'prd_review_gate') {
+      return
+    }
+
+    setRequirementHumanConversationLoading(true)
+    setRequirementHumanConversationError('')
+    try {
+      await saveRequirement({
+        id: selectedRequirement.id,
+        title: selectedRequirement.title,
+        content: selectedRequirement.content,
+        status: selectedRequirement.status,
+        source: selectedRequirement.source
+      })
+      await processRequirementService({
+        requirementId: selectedRequirement.id,
+        type: 'clarify',
+        source: '人工对齐'
+      })
+      setRequirementHumanInput('')
+    } catch (error) {
+      setRequirementHumanConversationError(error instanceof Error ? error.message : pickText('确认流转失败', 'Failed to confirm transition'))
+    } finally {
+      setRequirementHumanConversationLoading(false)
     }
   }
 
@@ -3273,6 +3621,250 @@ function Workspace({
               </div>
             ) : null}
 
+            {requirementStageTraceModal.open ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+                <div className="flex h-[82vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                  <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{requirementStageTraceModal.stageLabel || t('节点详情', 'Node Details')}</p>
+                      <p className="text-xs text-slate-500">{t('Agent 多轮工具调用消息', 'Agent multi-round tool call messages')}</p>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={closeRequirementStageTraceModal}>
+                      {t('关闭', 'Close')}
+                    </Button>
+                  </div>
+
+                  <div
+                    ref={taskStageTraceMessagesContainerRef}
+                    className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(241,245,249,0.8),_rgba(248,250,252,0.95)_42%,_rgba(255,255,255,1)_100%)] p-4"
+                  >
+                    {requirementStageTraceModal.loading && !shouldShowRequirementTraceToolWaitingDots ? (
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">{t('加载中...', 'Loading...')}</div>
+                    ) : requirementStageTraceModal.error ? (
+                      <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{requirementStageTraceModal.error}</div>
+                    ) : requirementStageTraceDisplayItems.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-500">{t('暂无可展示消息', 'No messages to display')}</div>
+                    ) : (
+                      (() => {
+                        let toolPairIndex = 0
+                        return requirementStageTraceDisplayItems.map((item) => {
+                        if (item.kind === 'paired_tool' && item.toolUse) {
+                          toolPairIndex += 1
+                          const useMsg = item.toolUse
+                          const isTodoWriteTool = (useMsg.toolName?.trim().toLowerCase() ?? '') === 'todowrite'
+                          const todoItems = isTodoWriteTool ? parseTodoWriteItems(useMsg) : []
+                          const resultMsg = item.toolResult
+                          const isLoading = !resultMsg
+                          const isFailed = Boolean(resultMsg && (resultMsg.isError || resultMsg.role === 'system'))
+                          return (
+                            <div key={item.id} className="flex justify-start">
+                              <div className="grid w-full max-w-[72%] grid-cols-[minmax(0,1.45fr)_minmax(154px,0.62fr)] gap-2">
+                                <div className="min-w-0">
+                                  <button
+                                    type="button"
+                                    className={cn(
+                                      'w-full rounded-2xl border px-3.5 py-2.5 text-left text-sm shadow-sm transition',
+                                      isTodoWriteTool
+                                        ? 'border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100'
+                                        : 'border-indigo-200 bg-indigo-50 text-indigo-900 hover:bg-indigo-100'
+                                    )}
+                                    onClick={() =>
+                                      openTaskTraceDetailModal({
+                                        title: `Tool #${toolPairIndex}${useMsg.toolName ? ` · ${useMsg.toolName}` : ''}`,
+                                        subtitle: 'tool_use',
+                                        content: useMsg.content || '(empty)'
+                                      })
+                                    }
+                                  >
+                                    <div className="mb-2 flex items-center gap-1.5 whitespace-nowrap">
+                                      <span
+                                        className={cn(
+                                          'rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.06em]',
+                                          isTodoWriteTool ? 'bg-sky-100 text-sky-800' : 'bg-indigo-100 text-indigo-800'
+                                        )}
+                                      >
+                                        {`Tool #${toolPairIndex}`}
+                                      </span>
+                                      <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-700">
+                                        {useMsg.toolName || 'tool'}
+                                      </span>
+                                    </div>
+                                    {isTodoWriteTool && todoItems.length > 0 ? (
+                                      <div className="space-y-1.5">
+                                        {todoItems.map((todo, todoIndex) => {
+                                          const meta = getTodoStatusMeta(todo.status)
+                                          return (
+                                            <div
+                                              key={`${item.id}-todo-${todoIndex}`}
+                                              className={cn('flex items-start gap-2 rounded-lg border px-2 py-1.5', meta.rowClassName)}
+                                            >
+                                              <span className={cn('mt-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium', meta.badgeClassName)}>
+                                                {meta.label}
+                                              </span>
+                                              <span className="min-w-0 flex-1 break-words text-xs leading-5">{todo.content}</span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <p className="whitespace-nowrap overflow-hidden text-ellipsis">{summarizeToolUse(useMsg)}</p>
+                                    )}
+                                  </button>
+                                </div>
+                                <div className="min-w-0">
+                                  <button
+                                    type="button"
+                                    className={cn(
+                                      'w-full rounded-2xl border px-3.5 py-2.5 text-left text-sm shadow-sm transition',
+                                      isLoading
+                                        ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                                        : isFailed
+                                          ? 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100'
+                                        : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                                    )}
+                                    onClick={() =>
+                                      openTaskTraceDetailModal({
+                                        title: `Tool #${toolPairIndex} Result`,
+                                        subtitle: isLoading ? 'tool_result (pending)' : 'tool_result',
+                                        content: resultMsg?.content || 'No tool_result yet. This tool call is still running.'
+                                      })
+                                    }
+                                  >
+                                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                                      <span
+                                        className={cn(
+                                          'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em]',
+                                          isLoading
+                                            ? 'bg-amber-100 text-amber-800'
+                                            : isFailed
+                                              ? 'bg-red-100 text-red-800'
+                                              : 'bg-emerald-100 text-emerald-800'
+                                        )}
+                                      >
+                                        {isLoading ? 'Running' : isFailed ? 'Failed' : 'Success'}
+                                      </span>
+                                    </div>
+                                    {isLoading ? (
+                                      <div className="inline-flex items-center gap-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                                        <span>{summarizeToolResult(resultMsg)}</span>
+                                      </div>
+                                    ) : (
+                                      <p className="whitespace-nowrap overflow-hidden text-ellipsis">{summarizeToolResult(resultMsg)}</p>
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        }
+
+                        const message = item.message!
+                        const messageTypeLabel = getTaskTraceTypeLabel(message.messageType)
+                        const hideTextTypeTagForHumanRole =
+                          (message.role === 'user' || message.role === 'assistant') && messageTypeLabel === 'text'
+                        return (
+                          <div key={item.id} className={cn('flex', message.role === 'user' ? 'justify-end' : 'justify-start')}>
+                            <div
+                              className={cn(
+                                'max-w-[92%] whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-2xl px-3.5 py-2.5 text-sm leading-6 shadow-sm',
+                                message.role === 'user'
+                                  ? 'border border-sky-200 bg-sky-50 text-sky-900'
+                                  : message.role === 'assistant'
+                                    ? 'border border-slate-200 bg-white text-slate-800'
+                                    : message.role === 'tool'
+                                      ? 'border border-indigo-200 bg-indigo-50 text-indigo-900'
+                                      : 'border border-amber-200 bg-amber-50 text-amber-800'
+                              )}
+                            >
+                              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                                <span
+                                  className={cn(
+                                    'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em]',
+                                    message.role === 'user'
+                                      ? 'bg-sky-100 text-sky-800'
+                                      : message.role === 'assistant'
+                                        ? 'bg-slate-100 text-slate-700'
+                                        : message.role === 'tool'
+                                          ? 'bg-indigo-100 text-indigo-800'
+                                          : 'bg-amber-100 text-amber-800'
+                                  )}
+                                >
+                                  {getTaskTraceRoleLabel(message.role)}
+                                </span>
+                                {hideTextTypeTagForHumanRole ? null : (
+                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-700">
+                                    {messageTypeLabel}
+                                  </span>
+                                )}
+                              </div>
+                              {message.role === 'assistant' ? (
+                                <div className="space-y-2">{renderMarkdown(message.content)}</div>
+                              ) : (
+                                message.content
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })
+                      })()
+                    )}
+                    {shouldShowRequirementTraceToolWaitingDots ? (
+                      <div className="flex justify-start">
+                        <div className="inline-flex items-center px-1 py-1">
+                          <div className="dot-scale-loader" aria-label={t('工具调用中', 'Tool call running')}>
+                            <span />
+                            <span />
+                            <span />
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {requirementTraceIsWaitingHumanMode ? (
+                    <div className="border-t border-amber-200 bg-amber-50/40 px-4 py-3">
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        {t('发送补充信息时需求会保持等待人工状态，只有点击“确认进入下一阶段”才会继续流转。', 'Sending supplemental information keeps the requirement in waiting-human status. Only clicking "Confirm Next Stage" will continue the flow.')}
+                      </div>
+                      {requirementHumanConversationError ? (
+                        <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{requirementHumanConversationError}</div>
+                      ) : null}
+                      <div className="mt-2 space-y-2">
+                        <Textarea
+                          rows={3}
+                          ref={taskHumanInputRef}
+                          value={requirementHumanInput}
+                          onChange={(event) => setRequirementHumanInput(event.target.value)}
+                          placeholder={t('输入补充说明，Agent 会在当前执行节点继续修正产物。', 'Enter supplemental instructions. Agent will keep refining artifacts in the current stage.')}
+                          disabled={loading || requirementHumanConversationLoading}
+                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => void onSendRequirementHumanConversation()}
+                            disabled={loading || requirementHumanConversationLoading || !requirementHumanInput.trim()}
+                          >
+                            {t('发送补充', 'Send Supplement')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-8"
+                            onClick={() => void onConfirmRequirementHuman()}
+                            disabled={loading || requirementHumanConversationLoading}
+                          >
+                            {t('确认进入下一阶段', 'Confirm Next Stage')}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             {taskTraceDetailModal.open ? (
               <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4">
                 <div className="flex h-[72vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
@@ -4131,7 +4723,17 @@ function Workspace({
 
                   <div className="space-y-3">
                     <p className="text-xs text-slate-500">{t('状态流转', 'Status Flow')}</p>
-                    <StageFlowList cards={requirementFlowStageCards} />
+                    <StageFlowList
+                      cards={requirementFlowStageCards}
+                      onViewDetail={(cardId) => {
+                        const card = selectedRequirementFlowCards.find((item) => item.id === cardId)
+                        if (!card) {
+                          return
+                        }
+
+                        onOpenRequirementStageTraceModal(card)
+                      }}
+                    />
                   </div>
 
                   <Separator />
@@ -4210,6 +4812,7 @@ export default function App() {
       loadRequirementConversation={state.loadRequirementConversation}
       getClarifyMessages={state.getClarifyMessages}
       clearClarifyMessages={state.clearClarifyMessages}
+      saveRequirement={state.saveRequirement}
       applyTaskCommand={state.applyTaskCommand}
       loadTaskHumanConversation={state.loadTaskHumanConversation}
       sendTaskHumanConversation={state.sendTaskHumanConversation}

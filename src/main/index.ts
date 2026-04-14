@@ -14,6 +14,7 @@ import {
   getRequirementConversation,
   getTaskHumanConversation,
   getTaskStageRunTrace,
+  getRequirementStageRunTrace,
   listTaskArtifacts,
   orchestrateTask,
   processRequirement,
@@ -50,6 +51,8 @@ import {
   type RequirementAutoProcessorStatusResult,
   type RequirementStageRunListReq,
   type RequirementStageRunListResult,
+  type RequirementStageRunTraceGetReq,
+  type RequirementStageRunTraceGetResult,
   type TaskAutoProcessorStartReq,
   type TaskAutoProcessorStartResult,
   type TaskAutoProcessorStopResult,
@@ -115,6 +118,7 @@ import {
 } from "./task-service";
 import { failAllRunningTaskStageRuns } from "./task-stage-run-repo";
 import { failAllRunningRequirementStageRuns, listRequirementStageRuns } from "./requirement-stage-run-repo";
+import { onRequirementStageRunChanged } from "./requirement-stage-run-events";
 import { onTaskStageTraceChanged } from "./task-stage-trace-events";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -162,6 +166,16 @@ function emitTaskStageTraceChanged(payload: {
 }): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(IPC_CHANNELS.TASK_STAGE_TRACE_CHANGED, payload);
+  }
+}
+
+function emitRequirementStageRunChanged(payload: {
+  requirementId: number;
+  stageRunId: number;
+  stageKey: Extract<Requirement["status"], "evaluating" | "prd_designing" | "prd_reviewing">;
+}): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(IPC_CHANNELS.REQUIREMENT_STAGE_RUN_CHANGED, payload);
   }
 }
 
@@ -326,6 +340,9 @@ async function runRequirementAutoProcessorTick(): Promise<void> {
           requirementId: candidate.id,
           type: "product",
           source: "自动轮询",
+          onRequirementTransition: (_before, after) => {
+            emitRequirementStatusChanged(after);
+          },
         }),
       (outcome) => outcome.requirement,
     );
@@ -970,7 +987,13 @@ function registerIpcHandlers(): void {
       try {
         const outcome = await runRequirementWithStatusBroadcast(
           () => getRequirementById(req.requirementId),
-          () => processRequirement(req),
+          () =>
+            processRequirement({
+              ...req,
+              onRequirementTransition: (_before, after) => {
+                emitRequirementStatusChanged(after);
+              },
+            }),
           (result) => result.requirement,
         );
         return {
@@ -1176,6 +1199,48 @@ function registerIpcHandlers(): void {
         ok: true,
         data: getTaskAutoProcessorStatusData(),
       };
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.REQUIREMENT_STAGE_RUN_TRACE_GET,
+    async (
+      _event,
+      req: RequirementStageRunTraceGetReq,
+    ): Promise<RequirementStageRunTraceGetResult> => {
+      try {
+        const trace = await getRequirementStageRunTrace(req.stageRunId);
+        const stageRuns = listRequirementStageRuns(trace.stageRun.requirementId);
+        const stageRun = stageRuns.find((item) => item.id === trace.stageRun.id);
+        if (!stageRun) {
+          return {
+            ok: false,
+            error: {
+              code: "REQUIREMENT_STAGE_RUN_TRACE_GET_ERROR",
+              message: "需求阶段记录不存在",
+            },
+          };
+        }
+
+        return {
+          ok: true,
+          data: {
+            stageRun,
+            messages: trace.messages,
+          },
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            code: "REQUIREMENT_STAGE_RUN_TRACE_GET_ERROR",
+            message:
+              error instanceof Error
+                ? error.message
+                : "读取需求阶段详情失败",
+          },
+        };
+      }
     },
   );
 
@@ -1626,6 +1691,9 @@ app.whenReady().then(() => {
   getDb();
   onTaskStageTraceChanged((payload) => {
     emitTaskStageTraceChanged(payload);
+  });
+  onRequirementStageRunChanged((payload) => {
+    emitRequirementStageRunChanged(payload);
   });
   failAllRunningRequirementStageRuns(
     "应用重启，上一轮运行未正常结束，自动回填为失败",

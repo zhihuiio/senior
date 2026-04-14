@@ -27,6 +27,9 @@ import type {
   RequirementAutoProcessorStatusResult,
   RequirementStageRunListReq,
   RequirementStageRunListResult,
+  RequirementStageRunTraceGetReq,
+  RequirementStageRunTraceGetResult,
+  RequirementStageRunChangedEvent,
   TaskAutoProcessorStartReq,
   TaskAutoProcessorStartResult,
   TaskAutoProcessorStopResult,
@@ -80,6 +83,7 @@ export interface RendererApi {
   stopRequirementAutoProcessor(): Promise<RequirementAutoProcessorStopResult>
   getRequirementAutoProcessorStatus(): Promise<RequirementAutoProcessorStatusResult>
   listRequirementStageRuns(req: RequirementStageRunListReq): Promise<RequirementStageRunListResult>
+  getRequirementStageRunTrace(req: RequirementStageRunTraceGetReq): Promise<RequirementStageRunTraceGetResult>
   startTaskAutoProcessor(req?: TaskAutoProcessorStartReq): Promise<TaskAutoProcessorStartResult>
   stopTaskAutoProcessor(): Promise<TaskAutoProcessorStopResult>
   getTaskAutoProcessorStatus(): Promise<TaskAutoProcessorStatusResult>
@@ -98,6 +102,9 @@ export interface RendererApi {
   getTaskStageRunTrace(req: TaskStageRunTraceGetReq): Promise<TaskStageRunTraceGetResult>
   onRequirementStatusChanged(
     listener: (event: RequirementStatusChangedEvent) => void
+  ): () => void
+  onRequirementStageRunChanged(
+    listener: (event: RequirementStageRunChangedEvent) => void
   ): () => void
   onTaskStatusChanged(
     listener: (event: TaskStatusChangedEvent) => void
@@ -155,6 +162,9 @@ const api: RendererApi = {
   },
   listRequirementStageRuns(req) {
     return ipcRenderer.invoke(IPC_CHANNELS.REQUIREMENT_STAGE_RUN_LIST, req)
+  },
+  getRequirementStageRunTrace(req) {
+    return ipcRenderer.invoke(IPC_CHANNELS.REQUIREMENT_STAGE_RUN_TRACE_GET, req)
   },
   startTaskAutoProcessor(req = {}) {
     return ipcRenderer.invoke(IPC_CHANNELS.TASK_AUTO_PROCESSOR_START, req)
@@ -214,6 +224,18 @@ const api: RendererApi = {
     ipcRenderer.on(IPC_CHANNELS.REQUIREMENT_STATUS_CHANGED, wrapped)
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.REQUIREMENT_STATUS_CHANGED, wrapped)
+    }
+  },
+  onRequirementStageRunChanged(listener) {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      payload: RequirementStageRunChangedEvent
+    ) => {
+      listener(payload)
+    }
+    ipcRenderer.on(IPC_CHANNELS.REQUIREMENT_STAGE_RUN_CHANGED, wrapped)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.REQUIREMENT_STAGE_RUN_CHANGED, wrapped)
     }
   },
   onTaskStatusChanged(listener) {

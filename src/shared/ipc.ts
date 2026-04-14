@@ -31,6 +31,7 @@ export const IPC_CHANNELS = {
   REQUIREMENT_AUTO_PROCESSOR_STOP: 'requirement:autoProcessor:stop',
   REQUIREMENT_AUTO_PROCESSOR_STATUS: 'requirement:autoProcessor:status',
   REQUIREMENT_STATUS_CHANGED: 'requirement:statusChanged',
+  REQUIREMENT_STAGE_RUN_CHANGED: 'requirement:stageRunChanged',
   TASK_STATUS_CHANGED: 'task:statusChanged',
   TASK_STAGE_TRACE_CHANGED: 'task:stageTraceChanged',
   TASK_AUTO_PROCESSOR_START: 'task:autoProcessor:start',
@@ -47,6 +48,7 @@ export const IPC_CHANNELS = {
   TASK_ORCHESTRATE: 'task:orchestrate',
   TASK_ARTIFACT_LIST: 'task:artifact:list',
   TASK_ARTIFACT_READ: 'task:artifact:read',
+  REQUIREMENT_STAGE_RUN_TRACE_GET: 'requirement:stageRun:traceGet',
   TASK_STAGE_RUN_LIST: 'task:stageRun:list',
   TASK_STAGE_RUN_TRACE_GET: 'task:stageRun:traceGet',
   REQUIREMENT_STAGE_RUN_LIST: 'requirement:stageRun:list'
@@ -351,6 +353,10 @@ export interface RequirementStageRunListReq {
   requirementId: number
 }
 
+export interface RequirementStageRunTraceGetReq {
+  stageRunId: number
+}
+
 export interface RequirementStageRunListOk {
   ok: true
   data: {
@@ -368,10 +374,34 @@ export interface RequirementStageRunListErr {
 
 export type RequirementStageRunListResult = RequirementStageRunListOk | RequirementStageRunListErr
 
+export interface RequirementStageRunTraceGetOk {
+  ok: true
+  data: {
+    stageRun: RequirementStageRun
+    messages: TaskAgentTraceMessage[]
+  }
+}
+
+export interface RequirementStageRunTraceGetErr {
+  ok: false
+  error: {
+    code: string
+    message: string
+  }
+}
+
+export type RequirementStageRunTraceGetResult = RequirementStageRunTraceGetOk | RequirementStageRunTraceGetErr
+
 export interface RequirementStatusChangedEvent {
   requirementId: number
   projectId: number
   status: RequirementStatus
+}
+
+export interface RequirementStageRunChangedEvent {
+  requirementId: number
+  stageRunId: number
+  stageKey: Extract<RequirementStatus, 'evaluating' | 'prd_designing' | 'prd_reviewing'>
 }
 
 export interface TaskStatusChangedEvent {

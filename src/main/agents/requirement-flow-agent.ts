@@ -33,6 +33,7 @@ export interface ProcessRequirementInput {
   requirementId: number
   type: string
   source: string
+  onRequirementTransition?: (before: Requirement, after: Requirement) => void
 }
 
 export interface ProcessRequirementResult {
@@ -43,6 +44,18 @@ export interface ProcessRequirementResult {
 export interface RequirementConversationResult {
   requirement: Requirement
   messages: RequirementConversationMessage[]
+}
+
+function emitRequirementTransition(input: ProcessRequirementInput, before: Requirement, after: Requirement): void {
+  if (!input.onRequirementTransition) {
+    return
+  }
+
+  if (before.status === after.status && before.waitingContext === after.waitingContext) {
+    return
+  }
+
+  input.onRequirementTransition(before, after)
 }
 
 interface RequirementConversationReadOptions {
@@ -404,12 +417,16 @@ export async function processRequirement(input: ProcessRequirementInput): Promis
   }
 
   if (requirement.status === 'pending') {
+    const before = requirement
     requirement = applyRequirementAction({ id: requirement.id, action: 'grab' })
+    emitRequirementTransition(input, before, requirement)
   }
 
   if (requirement.status === 'evaluating') {
+    const before = requirement
     const evaluation = await runEvaluationStage(requirement)
     requirement = evaluation.requirement
+    emitRequirementTransition(input, before, requirement)
   }
 
   if (requirement.status === 'queued') {
@@ -421,13 +438,17 @@ export async function processRequirement(input: ProcessRequirementInput): Promis
   }
 
   if (requirement.status === 'prd_designing') {
+    const before = requirement
     const design = await runPrdDesignStage(requirement, source, type)
     requirement = design.requirement
+    emitRequirementTransition(input, before, requirement)
   }
 
   if (requirement.status === 'prd_reviewing') {
+    const before = requirement
     const review = await runPrdReviewStage(requirement, source)
     requirement = review.requirement
+    emitRequirementTransition(input, before, requirement)
   }
 
   if (requirement.status === 'queued') {

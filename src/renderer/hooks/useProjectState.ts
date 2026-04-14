@@ -377,9 +377,15 @@ export function useProjectState() {
     }
 
     let inFlight = false
+    let pending = false
 
-    const unsubscribe = window.api.onRequirementStatusChanged((event) => {
-      if (!selectedProjectId || event.projectId !== selectedProjectId || inFlight) {
+    const refresh = () => {
+      if (!selectedProjectId) {
+        return
+      }
+
+      if (inFlight) {
+        pending = true
         return
       }
 
@@ -390,7 +396,19 @@ export function useProjectState() {
         })
         .finally(() => {
           inFlight = false
+          if (pending) {
+            pending = false
+            refresh()
+          }
         })
+    }
+
+    const unsubscribe = window.api.onRequirementStatusChanged((event) => {
+      if (!selectedProjectId || event.projectId !== selectedProjectId) {
+        return
+      }
+
+      refresh()
     })
 
     return () => {
@@ -404,9 +422,15 @@ export function useProjectState() {
     }
 
     let inFlight = false
+    let pending = false
 
-    const unsubscribe = window.api.onTaskStatusChanged((event) => {
-      if (!selectedProjectId || event.projectId !== selectedProjectId || inFlight) {
+    const refresh = () => {
+      if (!selectedProjectId) {
+        return
+      }
+
+      if (inFlight) {
+        pending = true
         return
       }
 
@@ -417,7 +441,19 @@ export function useProjectState() {
         })
         .finally(() => {
           inFlight = false
+          if (pending) {
+            pending = false
+            refresh()
+          }
         })
+    }
+
+    const unsubscribe = window.api.onTaskStatusChanged((event) => {
+      if (!selectedProjectId || event.projectId !== selectedProjectId) {
+        return
+      }
+
+      refresh()
     })
 
     return () => {
