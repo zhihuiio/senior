@@ -136,6 +136,25 @@ function appendUserSupplement(requirement: Requirement, message: string): string
   return requirement.content ? `${requirement.content}\n\n${extraLine}` : extraLine
 }
 
+function findWaitingRequirementStageRun(requirementId: number): {
+  id: number
+  agentProcess: string
+  agentSessionId: string | null
+} | null {
+  const waitingRun = [...listRequirementStageRuns(requirementId)]
+    .reverse()
+    .find((item) => item.resultStatus === 'waiting_human' && item.endAt === null)
+  if (!waitingRun) {
+    return null
+  }
+
+  return {
+    id: waitingRun.id,
+    agentProcess: waitingRun.agentProcess,
+    agentSessionId: waitingRun.agentSessionId
+  }
+}
+
 function upsertTasksForQueuedRequirement(requirement: Requirement): void {
   if (requirement.status !== 'queued') {
     return
@@ -528,28 +547,75 @@ export async function replyRequirementConversation(input: {
     throw new Error('当前需求不在待人工处理状态')
   }
 
+  const waitingRun = findWaitingRequirementStageRun(current.id)
+  if (!waitingRun) {
+    throw new Error('未找到等待人工的节点运行记录')
+  }
+
+  const project = getProject(current.projectId)
+  if (!project) {
+    throw new Error('关联项目不存在，无法执行人工会话')
+  }
+
+  const stageHistory = parseAgentConversations(waitingRun.agentProcess)
+  const resumeSessionId = waitingRun.agentSessionId ?? current.agentSessionId ?? undefined
+  const run = await RequirementAgent.runWithConversations(
+    {
+      requirement: message,
+      source: current.source || '未填写',
+      promptMode: 'followup',
+      projectPath: project.path
+    },
+    resumeSessionId,
+    {
+      onProgress: (progress) => {
+        const sessionId = progress.sessionId?.trim()
+        if (!sessionId) {
+          return
+        }
+        try {
+          updateRequirementStageRunAgentSessionId({
+            stageRunId: waitingRun.id,
+            agentSessionId: sessionId
+          })
+          updateRequirementSessionIdIfEmpty({
+            id: current.id,
+            agentSessionId: sessionId
+          })
+        } catch {
+          // ignore
+        }
+      }
+    }
+  )
+
+  const mergedConversations = [...stageHistory, ...run.conversations]
+  const mergedHistory = stringifyAgentConversations(mergedConversations)
   const updated = updateRequirementDetail({
     id: current.id,
     title: current.title,
     content: appendUserSupplement(current, message),
     status: 'prd_designing',
     source: current.source,
-    standardizedData: current.standardizedData,
-    agentProcess: current.agentProcess,
-    agentSessionId: current.agentSessionId
+    standardizedData: {
+      type: 'prd',
+      prd: run.decision.prd,
+      subTasks: run.decision.subTasks
+    },
+    agentProcess: mergedHistory,
+    agentSessionId: run.sessionId ?? waitingRun.agentSessionId ?? current.agentSessionId
   })
-
-  const outcome = await processRequirement({
-    requirementId: updated.id,
-    type: 'clarify',
-    source: '人工对齐'
+  updateRequirementStageRunAgentTrace({
+    stageRunId: waitingRun.id,
+    agentProcess: mergedHistory,
+    agentSessionId: run.sessionId ?? waitingRun.agentSessionId ?? null
   })
-
-  const latestRequirement = outcome.requirement
-  const messages = await getRequirementConversationMessages(latestRequirement)
+  const messages = run.sessionId
+    ? await getRequirementConversationMessagesBySessionId(updated, run.sessionId)
+    : await getRequirementConversationMessages(updated)
 
   return {
-    requirement: latestRequirement,
+    requirement: updated,
     messages
   }
 }

@@ -2263,6 +2263,55 @@ function Workspace({
     [activeListType, filteredTasks, focusTaskHumanInput, openTaskDetail, refreshTaskStageTrace, selectedTaskFlowCards]
   )
 
+  const openRequirementHumanConversation = useCallback(
+    async (requirementId: number) => {
+      if (activeListType !== 'requirement') {
+        return
+      }
+
+      if (selectedRequirement?.id !== requirementId) {
+        selectRequirement(requirementId)
+      }
+
+      try {
+        const stageRuns = await listRequirementStageRuns({ requirementId })
+        setRequirementStageRunsByRequirementId((prev) => ({
+          ...prev,
+          [requirementId]: stageRuns
+        }))
+
+        const waitingStageRun = stageRuns.slice().reverse().find((run) => run.resultStatus === 'waiting_human')
+        if (!waitingStageRun) {
+          return
+        }
+
+        const stageLabel = getRequirementStageLabel(waitingStageRun.stageKey)
+        const stageTitle =
+          waitingStageRun.round > 1
+            ? t(`${stageLabel}（第${waitingStageRun.round}轮）`, `${stageLabel} (Round ${waitingStageRun.round})`)
+            : stageLabel
+
+        setRequirementStageTraceModal({
+          open: true,
+          stageRunId: waitingStageRun.id,
+          requirementId,
+          agentSessionId: waitingStageRun.agentSessionId,
+          humanMode: true,
+          stageLabel: stageTitle,
+          round: waitingStageRun.round,
+          loading: true,
+          error: '',
+          messages: []
+        })
+        void refreshRequirementStageTrace(waitingStageRun.id)
+        focusTaskHumanInput()
+      } catch {
+        // ignore; timeline refresh fallback already handled elsewhere
+      }
+    },
+    [activeListType, focusTaskHumanInput, refreshRequirementStageTrace, selectRequirement, selectedRequirement?.id, t]
+  )
+
   const closeArtifactModal = () => {
     setArtifactModalOpen(false)
     setArtifactModalFileName('')
@@ -2383,11 +2432,11 @@ function Workspace({
     void refreshTaskStageTrace(card.stageRunId)
   }
 
-  const onOpenRequirementStageTraceModal = (card: RequirementFlowCardItem) => {
+  const onOpenRequirementStageTraceModal = (card: RequirementFlowCardItem, requirementId?: number) => {
     setRequirementStageTraceModal({
       open: true,
       stageRunId: card.stageRunId,
-      requirementId: selectedRequirement?.id ?? null,
+      requirementId: requirementId ?? selectedRequirement?.id ?? null,
       agentSessionId: card.agentSessionId,
       humanMode: card.resultStatus === 'waiting_human',
       stageLabel: card.stageLabel,
@@ -2397,7 +2446,55 @@ function Workspace({
       messages: []
     })
     void refreshRequirementStageTrace(card.stageRunId)
+    if (card.resultStatus === 'waiting_human') {
+      focusTaskHumanInput()
+    }
   }
+
+  const openRequirementLatestStageTraceFromList = useCallback(
+    async (requirementId: number) => {
+      if (activeListType !== 'requirement') {
+        return
+      }
+
+      try {
+        const stageRuns = await listRequirementStageRuns({ requirementId })
+        setRequirementStageRunsByRequirementId((prev) => ({
+          ...prev,
+          [requirementId]: stageRuns
+        }))
+
+        const latestStageRun = stageRuns[stageRuns.length - 1]
+        if (!latestStageRun) {
+          return
+        }
+
+        const stageLabel = getRequirementStageLabel(latestStageRun.stageKey)
+        const stageTitle =
+          latestStageRun.round > 1 ? t(`${stageLabel}（第${latestStageRun.round}轮）`, `${stageLabel} (Round ${latestStageRun.round})`) : stageLabel
+
+        onOpenRequirementStageTraceModal(
+          {
+            id: `${latestStageRun.stageKey}-${latestStageRun.round}-${latestStageRun.id}`,
+            stageRunId: latestStageRun.id,
+            stageKey: latestStageRun.stageKey,
+            stageLabel: stageTitle,
+            round: latestStageRun.round,
+            startAt: latestStageRun.startAt,
+            endAt: latestStageRun.endAt,
+            resultStatus: latestStageRun.resultStatus,
+            failureReason: latestStageRun.failureReason,
+            durationText: formatDurationMs((latestStageRun.endAt ?? Date.now()) - latestStageRun.startAt),
+            agentSessionId: latestStageRun.agentSessionId
+          },
+          requirementId
+        )
+      } catch {
+        // ignore; fallback to existing timeline state
+      }
+    },
+    [activeListType, onOpenRequirementStageTraceModal, t]
+  )
 
   const onPreviewTaskArtifact = async (taskId: number, fileName: string) => {
     setArtifactModalOpen(true)
@@ -2605,9 +2702,13 @@ function Workspace({
 
     const hasCurrent = createRequirementProjectId !== null && projects.some((project) => project.id === createRequirementProjectId)
     if (!hasCurrent) {
-      setCreateRequirementProjectId(projects[0].id)
+      const fallbackProjectId =
+        selectedProjectId !== null && projects.some((project) => project.id === selectedProjectId)
+          ? selectedProjectId
+          : projects[0].id
+      setCreateRequirementProjectId(fallbackProjectId)
     }
-  }, [createRequirementProjectId, isCreateRequirementDialogOpen, projects])
+  }, [createRequirementProjectId, isCreateRequirementDialogOpen, projects, selectedProjectId])
 
   useEffect(() => {
     if (!isCreateTaskDialogOpen) {
@@ -2623,17 +2724,33 @@ function Workspace({
 
     const hasCurrent = createTaskProjectId !== null && projects.some((project) => project.id === createTaskProjectId)
     if (!hasCurrent) {
-      setCreateTaskProjectId(projects[0].id)
+      const fallbackProjectId =
+        selectedProjectId !== null && projects.some((project) => project.id === selectedProjectId)
+          ? selectedProjectId
+          : projects[0].id
+      setCreateTaskProjectId(fallbackProjectId)
     }
-  }, [createTaskProjectId, isCreateTaskDialogOpen, projects])
+  }, [createTaskProjectId, isCreateTaskDialogOpen, projects, selectedProjectId])
 
   const openCreateRequirementDialog = () => {
-    setCreateRequirementProjectId(projects.length > 0 ? projects[0].id : null)
+    const defaultProjectId =
+      projects.length > 0
+        ? selectedProjectId !== null && projects.some((project) => project.id === selectedProjectId)
+          ? selectedProjectId
+          : projects[0].id
+        : null
+    setCreateRequirementProjectId(defaultProjectId)
     setIsCreateRequirementDialogOpen(true)
   }
 
   const openCreateTaskDialog = () => {
-    setCreateTaskProjectId(projects.length > 0 ? projects[0].id : null)
+    const defaultProjectId =
+      projects.length > 0
+        ? selectedProjectId !== null && projects.some((project) => project.id === selectedProjectId)
+          ? selectedProjectId
+          : projects[0].id
+        : null
+    setCreateTaskProjectId(defaultProjectId)
     setIsCreateTaskDialogOpen(true)
   }
 
@@ -2694,16 +2811,6 @@ function Workspace({
   const showRequirementActions = activeMainTab === 'workspace' && activeListType === 'requirement'
   const showTaskActions = activeMainTab === 'workspace' && activeListType === 'task'
   const isOverviewTabActive = activeMainTab === 'overview'
-
-  const openClarifyDialog = (requirementId: number) => {
-    setClarifyDialogMode('clarify')
-    setClarifyDialogSessionId(undefined)
-    setClarifyDialogRefreshSeq(0)
-    setClarifyConversationPending(false)
-    setClarifyLoadingVisible(false)
-    setClarifyRequirementId(requirementId)
-    setClarifyInput('')
-  }
 
   const openConversationDetailDialog = (requirementId: number) => {
     setClarifyDialogMode('detail')
@@ -3636,7 +3743,10 @@ function Workspace({
 
                   <div
                     ref={taskStageTraceMessagesContainerRef}
-                    className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(241,245,249,0.8),_rgba(248,250,252,0.95)_42%,_rgba(255,255,255,1)_100%)] p-4"
+                    className={cn(
+                      'min-h-0 flex-1 space-y-3 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(241,245,249,0.8),_rgba(248,250,252,0.95)_42%,_rgba(255,255,255,1)_100%)] p-4',
+                      requirementTraceIsWaitingHumanMode ? 'pb-1' : null
+                    )}
                   >
                     {requirementStageTraceModal.loading && !shouldShowRequirementTraceToolWaitingDots ? (
                       <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">{t('加载中...', 'Loading...')}</div>
@@ -3943,7 +4053,7 @@ function Workspace({
                 <div className="flex h-[80vh] w-full max-w-3xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl">
                   <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
                     <div>
-                      <h3 className="text-sm font-semibold text-slate-900">{isClarifyDialogReadonly ? t('查看细节', 'View Details') : t('人工对齐', 'Human Alignment')}</h3>
+                      <h3 className="text-sm font-semibold text-slate-900">{isClarifyDialogReadonly ? t('查看详情', 'View Details') : t('人工对齐', 'Human Alignment')}</h3>
                       <p className="mt-0.5 text-xs text-slate-500">{t('需求', 'Requirement')} #{clarifyRequirementItem.id} · {clarifyRequirementItem.title}</p>
                     </div>
                     <Button variant="ghost" size="sm" onClick={closeClarifyDialog} disabled={!isClarifyDialogReadonly && loading}>
@@ -4303,11 +4413,11 @@ function Workspace({
                                     onClick={(event) => {
                                       event.stopPropagation()
                                       if (isClarifying) {
-                                        openClarifyDialog(requirement.id)
+                                        void openRequirementHumanConversation(requirement.id)
                                         return
                                       }
                                       if (isProcessing) {
-                                        openConversationDetailDialog(requirement.id)
+                                        void openRequirementLatestStageTraceFromList(requirement.id)
                                       }
                                     }}
                                     className={cn(
@@ -4317,9 +4427,9 @@ function Workspace({
                                         : isProcessing
                                           ? 'rounded-full border-blue-200 bg-blue-50 px-2.5 text-blue-700 hover:bg-blue-100 hover:text-blue-700'
                                         : 'px-2 text-slate-600 hover:bg-slate-100'
-                                    )}
+                                      )}
                                   >
-                                    {isClarifying ? t('人工对齐', 'Human Alignment') : isProcessing ? t('查看细节', 'View Details') : t('指派评审', 'Assign Reviewer')}
+                                    {isClarifying ? t('人工处理', 'Human handling') : isProcessing ? t('查看详情', 'View Details') : t('指派评审', 'Assign Reviewer')}
                                   </Button>
                                 </TableCell>
                               </TableRow>
@@ -4597,10 +4707,10 @@ function Workspace({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => openClarifyDialog(selectedRequirement.id)}
+                          onClick={() => void openRequirementHumanConversation(selectedRequirement.id)}
                           className="h-7 whitespace-nowrap rounded-full border-red-200 bg-red-50 px-2.5 text-xs text-red-700 hover:bg-red-100 hover:text-red-700"
                         >
-                          {t('人工对齐', 'Human Alignment')}
+                          {t('人工处理', 'Human handling')}
                         </Button>
                       ) : null}
                       <Button
