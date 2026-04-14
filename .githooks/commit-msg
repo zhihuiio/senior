@@ -1,0 +1,25 @@
+#!/bin/sh
+
+MSG_FILE="$1"
+
+if [ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ]; then
+  echo "commit-msg hook error: missing commit message file." >&2
+  exit 1
+fi
+
+# Read first non-empty, non-comment line as commit subject.
+SUBJECT="$(sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d' "$MSG_FILE" | head -n 1)"
+
+if [ -z "$SUBJECT" ]; then
+  echo "Commit message subject cannot be empty." >&2
+  exit 1
+fi
+
+# Enforce English-only subject by allowing printable ASCII characters only.
+if printf '%s' "$SUBJECT" | LC_ALL=C grep -q '[^ -~]'; then
+  echo "Commit message must be in English (ASCII only)." >&2
+  echo "Example: fix: prevent modal flicker on human handling dialog" >&2
+  exit 1
+fi
+
+exit 0
