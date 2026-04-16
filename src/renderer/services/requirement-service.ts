@@ -1,4 +1,5 @@
 import type { Requirement, RequirementConversationMessage, RequirementStageRun, RequirementStatus, RequirementTransitionAction, TaskAgentTraceMessage } from '../../shared/types'
+import type { RequirementArtifactFile } from '../../shared/ipc'
 import { pickText } from '../i18n'
 
 export interface AutoProcessorStatusData {
@@ -58,6 +59,15 @@ export interface ListRequirementStageRunsRequest {
 
 export interface GetRequirementStageRunTraceRequest {
   stageRunId: number
+}
+
+export interface ListRequirementArtifactsRequest {
+  requirementId: number
+}
+
+export interface ReadRequirementArtifactRequest {
+  requirementId: number
+  fileName: string
 }
 
 
@@ -183,6 +193,26 @@ export async function getRequirementStageRunTrace(
     stageRun: res.data.stageRun,
     messages: res.data.messages
   }
+}
+
+export async function listRequirementArtifacts(req: ListRequirementArtifactsRequest): Promise<RequirementArtifactFile[]> {
+  const res = await window.api.listRequirementArtifacts(req)
+
+  if (!res.ok) {
+    throw new Error(res.error.message)
+  }
+
+  return res.data.files
+}
+
+export async function readRequirementArtifact(req: ReadRequirementArtifactRequest): Promise<string> {
+  const res = await window.api.readRequirementArtifact(req)
+
+  if (!res.ok) {
+    throw new Error(res.error.message)
+  }
+
+  return res.data.content
 }
 
 export const REQUIREMENT_STATUS_LABEL: Record<RequirementStatus, string> = {

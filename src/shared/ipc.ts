@@ -48,6 +48,8 @@ export const IPC_CHANNELS = {
   TASK_ORCHESTRATE: 'task:orchestrate',
   TASK_ARTIFACT_LIST: 'task:artifact:list',
   TASK_ARTIFACT_READ: 'task:artifact:read',
+  REQUIREMENT_ARTIFACT_LIST: 'requirement:artifact:list',
+  REQUIREMENT_ARTIFACT_READ: 'requirement:artifact:read',
   REQUIREMENT_STAGE_RUN_TRACE_GET: 'requirement:stageRun:traceGet',
   TASK_STAGE_RUN_LIST: 'task:stageRun:list',
   TASK_STAGE_RUN_TRACE_GET: 'task:stageRun:traceGet',
@@ -715,6 +717,55 @@ export interface TaskArtifactReadErr {
 }
 
 export type TaskArtifactReadResult = TaskArtifactReadOk | TaskArtifactReadErr
+
+export interface RequirementArtifactListReq {
+  requirementId: number
+}
+
+export interface RequirementArtifactFile {
+  fileName: string
+  size: number
+  updatedAt: number
+}
+
+export interface RequirementArtifactListOk {
+  ok: true
+  data: {
+    files: RequirementArtifactFile[]
+  }
+}
+
+export interface RequirementArtifactListErr {
+  ok: false
+  error: {
+    code: string
+    message: string
+  }
+}
+
+export type RequirementArtifactListResult = RequirementArtifactListOk | RequirementArtifactListErr
+
+export interface RequirementArtifactReadReq {
+  requirementId: number
+  fileName: string
+}
+
+export interface RequirementArtifactReadOk {
+  ok: true
+  data: {
+    content: string
+  }
+}
+
+export interface RequirementArtifactReadErr {
+  ok: false
+  error: {
+    code: string
+    message: string
+  }
+}
+
+export type RequirementArtifactReadResult = RequirementArtifactReadOk | RequirementArtifactReadErr
 
 export interface TaskStageRunListReq {
   taskId: number

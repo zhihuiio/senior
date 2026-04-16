@@ -20,6 +20,7 @@ import {
   parseRequirementMessagesFromSessionList,
   stringifyAgentConversations
 } from '../agent-message-utils'
+import { readRequirementArtifactIfExists, resolveRequirementArtifactDir, writeRequirementArtifact } from '../requirement-artifact-service'
 import {
   finishRequirementStageRun,
   hasOpenRequirementStageRun,
@@ -62,10 +63,188 @@ interface RequirementConversationReadOptions {
   sessionId?: string
 }
 
+function deriveRequirementArtifactBaseName(stageKey: 'evaluating' | 'prd_designing' | 'prd_reviewing'): string {
+  if (stageKey === 'evaluating') {
+    return 'evaluation.json'
+  }
+  if (stageKey === 'prd_designing') {
+    return 'prd.md'
+  }
+
+  return 'prd_review.json'
+}
+
+function buildRequirementStageArtifactFileName(stageKey: 'evaluating' | 'prd_designing' | 'prd_reviewing', round: number): string {
+  const baseName = deriveRequirementArtifactBaseName(stageKey)
+  if (round <= 1) {
+    return baseName
+  }
+
+  const dotIndex = baseName.lastIndexOf('.')
+  if (dotIndex <= 0) {
+    return `${baseName}_v${round}`
+  }
+
+  const name = baseName.slice(0, dotIndex)
+  const ext = baseName.slice(dotIndex)
+  return `${name}_v${round}${ext}`
+}
+
+function resolveCurrentRequirementStageArtifactFileName(
+  requirementId: number,
+  stageKey: 'evaluating' | 'prd_designing' | 'prd_reviewing'
+): string {
+  const stageRuns = listRequirementStageRuns(requirementId)
+  const current = [...stageRuns]
+    .reverse()
+    .find((item) => item.stageKey === stageKey && item.endAt === null)
+
+  if (!current) {
+    return deriveRequirementArtifactBaseName(stageKey)
+  }
+
+  return buildRequirementStageArtifactFileName(stageKey, current.round)
+}
+
+function resolveLatestRequirementStageArtifactFileName(
+  requirementId: number,
+  stageKey: 'evaluating' | 'prd_designing' | 'prd_reviewing'
+): string {
+  const stageRuns = listRequirementStageRuns(requirementId)
+  const latest = [...stageRuns]
+    .reverse()
+    .find((item) => item.stageKey === stageKey && item.artifactFileNames.length > 0)
+
+  if (!latest) {
+    return deriveRequirementArtifactBaseName(stageKey)
+  }
+
+  return latest.artifactFileNames[latest.artifactFileNames.length - 1] ?? deriveRequirementArtifactBaseName(stageKey)
+}
+
+async function writeRequirementStageArtifact(
+  requirement: Requirement,
+  stageKey: 'evaluating' | 'prd_designing' | 'prd_reviewing',
+  content: string
+): Promise<void> {
+  const fileName = resolveCurrentRequirementStageArtifactFileName(requirement.id, stageKey)
+  const dir = await resolveRequirementArtifactDir(requirement.id)
+  await writeRequirementArtifact(dir, fileName, content)
+}
+
+async function readLatestRequirementStageArtifact(
+  requirement: Requirement,
+  stageKey: 'evaluating' | 'prd_designing' | 'prd_reviewing'
+): Promise<string | null> {
+  const fileName = resolveLatestRequirementStageArtifactFileName(requirement.id, stageKey)
+  const dir = await resolveRequirementArtifactDir(requirement.id)
+  return readRequirementArtifactIfExists(dir, fileName)
+}
+
+function buildEvaluationArtifactContent(run: RequirementEvaluationAgentRunResult): string {
+  return JSON.stringify(
+    {
+      type: 'evaluation',
+      result: run.decision.result,
+      summary: run.decision.summary,
+      generatedAt: new Date().toISOString()
+    },
+    null,
+    2
+  )
+}
+
+function buildPrdReviewArtifactContent(run: RequirementReviewAgentRunResult): string {
+  return JSON.stringify(
+    {
+      type: 'review',
+      result: run.decision.result,
+      summary: run.decision.summary,
+      generatedAt: new Date().toISOString()
+    },
+    null,
+    2
+  )
+}
+
+function normalizeComparableText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function hasRequirementUserMessage(messages: RequirementConversationMessage[], content: string): boolean {
+  const target = normalizeComparableText(content)
+  if (!target) {
+    return true
+  }
+
+  return messages.some((item) => item.role === 'user' && normalizeComparableText(item.content) === target)
+}
+
+function buildRequirementUserMessage(content: string): RequirementConversationMessage {
+  return {
+    id: `human-${Date.now()}`,
+    role: 'user',
+    content
+  }
+}
+
+function ensureRequirementUserMessage(messages: RequirementConversationMessage[], content: string): RequirementConversationMessage[] {
+  if (hasRequirementUserMessage(messages, content)) {
+    return messages
+  }
+
+  return [...messages, buildRequirementUserMessage(content)]
+}
+
+function appendMissingRequirementUserMessages(
+  base: RequirementConversationMessage[],
+  fallback: RequirementConversationMessage[]
+): RequirementConversationMessage[] {
+  let result = [...base]
+  for (const item of fallback) {
+    if (item.role !== 'user') {
+      continue
+    }
+
+    if (hasRequirementUserMessage(result, item.content)) {
+      continue
+    }
+
+    result = [...result, item]
+  }
+
+  return result
+}
+
+function createRequirementUserConversationRecord(content: string): Record<string, unknown> {
+  return {
+    type: 'user',
+    message: {
+      content: [{ type: 'text', text: content }]
+    }
+  }
+}
+
+function ensureRequirementUserConversationRecord(conversations: unknown[], content: string): unknown[] {
+  const normalized = normalizeComparableText(content)
+  if (!normalized) {
+    return conversations
+  }
+
+  const parsed = parseConversationMessages(conversations)
+  if (hasRequirementUserMessage(parsed, normalized)) {
+    return conversations
+  }
+
+  return [...conversations, createRequirementUserConversationRecord(normalized)]
+}
+
 function buildRequirementAgentInput(requirement: Requirement, input: Pick<ProcessRequirementInput, 'type' | 'source'>): RequirementAgentInput {
   return {
     requirement: `需求类型: ${input.type}\n需求标题: ${requirement.title}\n需求描述: ${requirement.content}`,
     source: input.source,
+    evaluationJson: null,
+    prdReviewJson: null,
     promptMode: 'full_context'
   }
 }
@@ -86,40 +265,42 @@ async function getRequirementConversationMessages(requirement: Requirement): Pro
   const hideSystemMessages = (messages: RequirementConversationMessage[]): RequirementConversationMessage[] => {
     return messages.filter((item) => item.role === 'user' || item.role === 'assistant')
   }
+  const fallbackMessages = hideSystemMessages(parseConversationMessages(parseAgentConversations(requirement.agentProcess)))
 
   if (requirement.agentSessionId) {
     try {
       const messages = await toRequirementMessagesFromSession(requirement.agentSessionId)
       if (messages.length > 0) {
-        return hideSystemMessages(messages)
+        return appendMissingRequirementUserMessages(hideSystemMessages(messages), fallbackMessages)
       }
     } catch {
       // fallback to persisted snapshots
     }
   }
 
-  return hideSystemMessages(parseConversationMessages(parseAgentConversations(requirement.agentProcess)))
+  return fallbackMessages
 }
 
 async function getRequirementConversationMessagesBySessionId(
   requirement: Requirement,
   sessionId: string
 ): Promise<RequirementConversationMessage[]> {
+  const fallbackMessages = await getRequirementConversationMessages(requirement)
   const normalizedSessionId = sessionId.trim()
   if (!normalizedSessionId) {
-    return getRequirementConversationMessages(requirement)
+    return fallbackMessages
   }
 
   try {
     const messages = await toRequirementMessagesFromSession(normalizedSessionId)
     if (messages.length > 0) {
-      return messages.filter((item) => item.role === 'user' || item.role === 'assistant')
+      return appendMissingRequirementUserMessages(messages.filter((item) => item.role === 'user' || item.role === 'assistant'), fallbackMessages)
     }
   } catch {
     // fallback to requirement session / snapshots
   }
 
-  return getRequirementConversationMessages(requirement)
+  return fallbackMessages
 }
 
 function buildConversationLine(prefix: string, content: string): string {
@@ -196,13 +377,15 @@ function closeRequirementStageRun(
   requirementId: number,
   stageKey: 'evaluating' | 'prd_designing' | 'prd_reviewing',
   resultStatus: 'succeeded' | 'failed' | 'waiting_human',
-  reason?: string
+  reason?: string,
+  artifactFileName?: string
 ): void {
   finishRequirementStageRun({
     requirementId,
     stageKey,
     resultStatus,
-    failureReason: reason
+    failureReason: reason,
+    artifactFileName: artifactFileName ?? deriveRequirementArtifactBaseName(stageKey)
   })
 }
 
@@ -221,6 +404,8 @@ async function runEvaluationStage(requirement: Requirement): Promise<{ requireme
       },
       requirement.agentSessionId ?? undefined
     )
+    const artifactFileName = resolveCurrentRequirementStageArtifactFileName(requirement.id, 'evaluating')
+    await writeRequirementStageArtifact(requirement, 'evaluating', buildEvaluationArtifactContent(run))
     const mergedHistory = stringifyAgentConversations(run.conversations)
     const isReasonable = run.decision.result === 'reasonable'
 
@@ -249,7 +434,7 @@ async function runEvaluationStage(requirement: Requirement): Promise<{ requireme
       })
     }
 
-    closeRequirementStageRun(requirement.id, 'evaluating', isReasonable ? 'succeeded' : 'failed', run.decision.summary)
+    closeRequirementStageRun(requirement.id, 'evaluating', isReasonable ? 'succeeded' : 'failed', run.decision.summary, artifactFileName)
     const moved = applyRequirementAction({ id: updated.id, action: isReasonable ? 'evaluate_pass' : 'evaluate_fail' })
     return { requirement: moved, run }
   } catch (error) {
@@ -295,9 +480,15 @@ async function runPrdDesignStage(requirement: Requirement, source: string, type:
   })()
 
   try {
+    const [evaluationJson, prdReviewJson] = await Promise.all([
+      readLatestRequirementStageArtifact(requirement, 'evaluating'),
+      readLatestRequirementStageArtifact(requirement, 'prd_reviewing')
+    ])
     const run = await RequirementAgent.runWithConversations(
       {
         ...buildRequirementAgentInput(requirement, { source, type }),
+        evaluationJson,
+        prdReviewJson,
         projectPath: project.path
       },
       requirement.agentSessionId ?? undefined,
@@ -306,6 +497,8 @@ async function runPrdDesignStage(requirement: Requirement, source: string, type:
       }
     )
 
+    const artifactFileName = resolveCurrentRequirementStageArtifactFileName(requirement.id, 'prd_designing')
+    await writeRequirementStageArtifact(requirement, 'prd_designing', run.decision.prd)
     const mergedHistory = stringifyAgentConversations(run.conversations)
     const updated = updateRequirementDetail({
       id: requirement.id,
@@ -332,7 +525,7 @@ async function runPrdDesignStage(requirement: Requirement, source: string, type:
       })
     }
 
-    closeRequirementStageRun(requirement.id, 'prd_designing', 'succeeded')
+    closeRequirementStageRun(requirement.id, 'prd_designing', 'succeeded', undefined, artifactFileName)
     const moved = applyRequirementAction({ id: updated.id, action: 'design_done' })
     return { requirement: moved, run }
   } catch (error) {
@@ -346,10 +539,6 @@ async function runPrdDesignStage(requirement: Requirement, source: string, type:
 }
 
 async function runPrdReviewStage(requirement: Requirement, source: string): Promise<{ requirement: Requirement; run: RequirementReviewAgentRunResult }> {
-  if (!requirement.standardizedData || requirement.standardizedData.type !== 'prd') {
-    throw new Error('缺少 PRD 设计结果，无法评审')
-  }
-
   ensureRequirementStageRun(requirement.id, 'prd_reviewing')
   try {
     const project = getProject(requirement.projectId)
@@ -357,13 +546,24 @@ async function runPrdReviewStage(requirement: Requirement, source: string): Prom
       throw new Error('关联项目不存在，无法执行需求评审')
     }
 
+    const prdContent = await readLatestRequirementStageArtifact(requirement, 'prd_designing')
+    if (!prdContent?.trim()) {
+      throw new Error('缺少 PRD 设计产物（prd.md），无法评审')
+    }
+    const subTasks =
+      requirement.standardizedData && requirement.standardizedData.type === 'prd'
+        ? requirement.standardizedData.subTasks
+        : [{ title: requirement.title, content: requirement.content }]
+
     const run = await RequirementReviewAgent.runWithConversations({
       requirement: `需求标题: ${requirement.title}\n需求描述: ${requirement.content}`,
       source,
-      prd: requirement.standardizedData.prd,
-      subTasks: requirement.standardizedData.subTasks,
+      prd: prdContent,
+      subTasks,
       projectPath: project.path
     })
+    const artifactFileName = resolveCurrentRequirementStageArtifactFileName(requirement.id, 'prd_reviewing')
+    await writeRequirementStageArtifact(requirement, 'prd_reviewing', buildPrdReviewArtifactContent(run))
 
     const stageRuns = listRequirementStageRuns(requirement.id)
     const stageRun = [...stageRuns].reverse().find((item) => item.stageKey === 'prd_reviewing' && item.endAt === null)
@@ -391,12 +591,12 @@ async function runPrdReviewStage(requirement: Requirement, source: string): Prom
     })
 
     if (run.decision.result === 'pass') {
-      closeRequirementStageRun(requirement.id, 'prd_reviewing', 'succeeded')
+      closeRequirementStageRun(requirement.id, 'prd_reviewing', 'succeeded', undefined, artifactFileName)
       const queued = applyRequirementAction({ id: updated.id, action: 'review_pass' })
       return { requirement: queued, run }
     }
 
-    closeRequirementStageRun(requirement.id, 'prd_reviewing', 'failed', run.decision.summary)
+    closeRequirementStageRun(requirement.id, 'prd_reviewing', 'failed', run.decision.summary, artifactFileName)
     const rolledBack = applyRequirementAction({ id: updated.id, action: 'review_fail' })
 
     if (rolledBack.waitingContext === 'prd_review_gate') {
@@ -589,7 +789,7 @@ export async function replyRequirementConversation(input: {
     }
   )
 
-  const mergedConversations = [...stageHistory, ...run.conversations]
+  const mergedConversations = ensureRequirementUserConversationRecord([...stageHistory, ...run.conversations], message)
   const mergedHistory = stringifyAgentConversations(mergedConversations)
   const updated = updateRequirementDetail({
     id: current.id,
@@ -610,9 +810,10 @@ export async function replyRequirementConversation(input: {
     agentProcess: mergedHistory,
     agentSessionId: run.sessionId ?? waitingRun.agentSessionId ?? null
   })
-  const messages = run.sessionId
+  let messages = run.sessionId
     ? await getRequirementConversationMessagesBySessionId(updated, run.sessionId)
     : await getRequirementConversationMessages(updated)
+  messages = ensureRequirementUserMessage(messages, message)
 
   return {
     requirement: updated,

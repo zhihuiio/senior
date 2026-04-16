@@ -15,9 +15,11 @@ import {
   getTaskHumanConversation,
   getTaskStageRunTrace,
   getRequirementStageRunTrace,
+  listRequirementArtifacts,
   listTaskArtifacts,
   orchestrateTask,
   processRequirement,
+  readRequirementArtifact,
   readTaskArtifact,
   replyTaskHumanConversation,
   replyRequirementConversation,
@@ -49,6 +51,10 @@ import {
   type RequirementAutoProcessorStartResult,
   type RequirementAutoProcessorStopResult,
   type RequirementAutoProcessorStatusResult,
+  type RequirementArtifactListReq,
+  type RequirementArtifactListResult,
+  type RequirementArtifactReadReq,
+  type RequirementArtifactReadResult,
   type RequirementStageRunListReq,
   type RequirementStageRunListResult,
   type RequirementStageRunTraceGetReq,
@@ -1199,6 +1205,63 @@ function registerIpcHandlers(): void {
         ok: true,
         data: getTaskAutoProcessorStatusData(),
       };
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.REQUIREMENT_ARTIFACT_LIST,
+    async (
+      _event,
+      req: RequirementArtifactListReq,
+    ): Promise<RequirementArtifactListResult> => {
+      try {
+        const files = await listRequirementArtifacts(req.requirementId);
+        return {
+          ok: true,
+          data: {
+            files,
+          },
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            code: "REQUIREMENT_ARTIFACT_LIST_ERROR",
+            message:
+              error instanceof Error ? error.message : "读取需求产物列表失败",
+          },
+        };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.REQUIREMENT_ARTIFACT_READ,
+    async (
+      _event,
+      req: RequirementArtifactReadReq,
+    ): Promise<RequirementArtifactReadResult> => {
+      try {
+        const content = await readRequirementArtifact(
+          req.requirementId,
+          req.fileName,
+        );
+        return {
+          ok: true,
+          data: {
+            content,
+          },
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            code: "REQUIREMENT_ARTIFACT_READ_ERROR",
+            message:
+              error instanceof Error ? error.message : "读取需求产物失败",
+          },
+        };
+      }
     },
   );
 

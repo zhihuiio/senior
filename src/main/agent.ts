@@ -13,5 +13,6 @@ export { getTaskHumanConversation, replyTaskHumanConversation } from './agents/t
 export { getTaskStageRunTrace, type TaskStageRunTraceResult } from './agents/task-trace-agent'
 export { getRequirementStageRunTrace, type RequirementStageRunTraceResult } from './agents/requirement-trace-agent'
 export { listTaskArtifacts, readTaskArtifact, type TaskArtifactFile } from './task-artifact-service'
+export { listRequirementArtifacts, readRequirementArtifact, type RequirementArtifactFile } from './requirement-artifact-service'
 export type { RequirementAgentDecision, RequirementAgentInput } from './agents/requirement-agent'
 export { REQUIREMENT_PRD_DESIGN_SYSTEM_PROMPT } from './agents/requirement-agent'

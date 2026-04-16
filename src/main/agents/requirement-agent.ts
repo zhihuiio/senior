@@ -33,6 +33,8 @@ export type RequirementEvaluationDecision = {
 export interface RequirementAgentInput {
   requirement: string
   source: string
+  evaluationJson?: string | null
+  prdReviewJson?: string | null
   promptMode?: 'full_context' | 'followup'
   projectPath?: string
 }

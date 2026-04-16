@@ -32,9 +32,15 @@ import { useProjectState } from './hooks/useProjectState'
 import type { RequirementStatusFilter, TaskStatusFilter } from './hooks/useProjectState'
 import { useI18n, pickText } from './i18n'
 import { revealProjectInFinder } from './services/project-service'
-import { getRequirementStageRunTrace, listRequirementStageRuns, processRequirement as processRequirementService } from './services/requirement-service'
+import {
+  getRequirementStageRunTrace,
+  listRequirementArtifacts,
+  listRequirementStageRuns,
+  processRequirement as processRequirementService,
+  readRequirementArtifact
+} from './services/requirement-service'
 import { getTaskStageRunTrace, listTaskArtifacts, listTaskStageRuns, readTaskArtifact } from './services/task-service'
-import type { TaskArtifactFile } from '../shared/ipc'
+import type { RequirementArtifactFile, TaskArtifactFile } from '../shared/ipc'
 import type {
   Requirement,
   RequirementConversationMessage,
@@ -200,6 +206,17 @@ function getRequirementStageLabel(stageKey: RequirementStageRun['stageKey']): st
   return pickText('PRD 评审', 'PRD Review')
 }
 
+function getDefaultRequirementArtifactFileName(stageKey: RequirementStageRun['stageKey']): string {
+  if (stageKey === 'evaluating') {
+    return 'evaluation.json'
+  }
+  if (stageKey === 'prd_designing') {
+    return 'prd.md'
+  }
+
+  return 'prd_review.json'
+}
+
 interface TaskFlowCardItem {
   id: string
   stageRunId: number
@@ -226,6 +243,7 @@ interface RequirementFlowCardItem {
   failureReason: string
   durationText: string
   agentSessionId: string | null
+  artifactFiles: RequirementArtifactFile[]
 }
 
 interface OverviewMetricCard {
@@ -270,6 +288,92 @@ interface TaskTraceDisplayItem {
   message?: TaskAgentTraceMessage
   toolUse?: TaskAgentTraceMessage
   toolResult?: TaskAgentTraceMessage | null
+}
+
+function normalizeComparableText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function appendTaskHumanMessageIfMissing(messages: TaskAgentTraceMessage[], content: string): TaskAgentTraceMessage[] {
+  const normalized = normalizeComparableText(content)
+  if (!normalized) {
+    return messages
+  }
+
+  const exists = messages.some((item) => item.role === 'user' && normalizeComparableText(item.content) === normalized)
+  if (exists) {
+    return messages
+  }
+
+  return [
+    ...messages,
+    {
+      id: `local-user-${Date.now()}`,
+      role: 'user',
+      messageType: 'text',
+      content: normalized
+    }
+  ]
+}
+
+function mergeTaskHumanMessages(
+  prev: TaskAgentTraceMessage[],
+  incoming: TaskAgentTraceMessage[],
+  options?: { ensureInput?: string }
+): TaskAgentTraceMessage[] {
+  const nextById = new Map<string, TaskAgentTraceMessage>()
+  const nextOrder: string[] = []
+
+  const push = (item: TaskAgentTraceMessage) => {
+    const id = item.id?.trim()
+    if (id) {
+      if (!nextById.has(id)) {
+        nextOrder.push(id)
+      }
+      nextById.set(id, item)
+      return
+    }
+
+    const key = `${item.role}:${item.messageType ?? ''}:${normalizeComparableText(item.content)}`
+    if (!nextById.has(key)) {
+      nextOrder.push(key)
+    }
+    nextById.set(key, item)
+  }
+
+  for (const item of prev) {
+    push(item)
+  }
+  for (const item of incoming) {
+    push(item)
+  }
+
+  let merged = nextOrder.map((id) => nextById.get(id)!).filter(Boolean)
+  const confirmedUserContents = new Set(
+    merged
+      .filter((item) => item.role === 'user' && !item.id.startsWith('local-user-'))
+      .map((item) => normalizeComparableText(item.content))
+      .filter(Boolean)
+  )
+  if (confirmedUserContents.size > 0) {
+    merged = merged.filter((item) => {
+      if (item.role !== 'user' || !item.id.startsWith('local-user-')) {
+        return true
+      }
+
+      return !confirmedUserContents.has(normalizeComparableText(item.content))
+    })
+  }
+
+  if (options?.ensureInput) {
+    merged = appendTaskHumanMessageIfMissing(merged, options.ensureInput)
+  }
+
+  return merged
+}
+
+function countAssistantMessages(messages: TaskAgentTraceMessage[]): number {
+  return messages.filter((item) => item.role === 'assistant').length
 }
 
 interface RequirementStageTraceModalState {
@@ -1192,6 +1296,7 @@ function Workspace({
   const [projectContextMenu, setProjectContextMenu] = useState<{ projectPath: string; x: number; y: number } | null>(null)
   const [taskArtifactsByTaskId, setTaskArtifactsByTaskId] = useState<Record<number, TaskArtifactFile[]>>({})
   const [taskStageRunsByTaskId, setTaskStageRunsByTaskId] = useState<Record<number, TaskStageRun[]>>({})
+  const [requirementArtifactsByRequirementId, setRequirementArtifactsByRequirementId] = useState<Record<number, RequirementArtifactFile[]>>({})
   const [requirementStageRunsByRequirementId, setRequirementStageRunsByRequirementId] = useState<Record<number, RequirementStageRun[]>>({})
   const [overviewTaskStageRunsByTaskId, setOverviewTaskStageRunsByTaskId] = useState<Record<number, TaskStageRun[]>>({})
   const [overviewRequirementStageRunsByRequirementId, setOverviewRequirementStageRunsByRequirementId] = useState<Record<number, RequirementStageRun[]>>({})
@@ -1239,10 +1344,12 @@ function Workspace({
   const [taskHumanInput, setTaskHumanInput] = useState('')
   const [taskHumanConversationLoading, setTaskHumanConversationLoading] = useState(false)
   const [taskHumanConversationError, setTaskHumanConversationError] = useState('')
+  const [taskHumanAwaitingAssistant, setTaskHumanAwaitingAssistant] = useState<{ taskId: number; baselineAssistantCount: number } | null>(null)
   const [requirementHumanMessagesByRequirementId, setRequirementHumanMessagesByRequirementId] = useState<Record<number, TaskAgentTraceMessage[]>>({})
   const [requirementHumanInput, setRequirementHumanInput] = useState('')
   const [requirementHumanConversationLoading, setRequirementHumanConversationLoading] = useState(false)
   const [requirementHumanConversationError, setRequirementHumanConversationError] = useState('')
+  const [requirementHumanAwaitingAssistant, setRequirementHumanAwaitingAssistant] = useState<{ requirementId: number; baselineAssistantCount: number } | null>(null)
 
   const refreshTaskTimelineData = useCallback(async (taskId: number) => {
     const [files, stageRuns] = await Promise.all([listTaskArtifacts(taskId), listTaskStageRuns({ taskId })])
@@ -1257,11 +1364,27 @@ function Workspace({
   }, [])
 
   const refreshRequirementTimelineData = useCallback(async (requirementId: number) => {
-    const stageRuns = await listRequirementStageRuns({ requirementId })
-    setRequirementStageRunsByRequirementId((prev) => ({
-      ...prev,
-      [requirementId]: stageRuns
-    }))
+    const [filesResult, stageRunsResult] = await Promise.allSettled([
+      listRequirementArtifacts({ requirementId }),
+      listRequirementStageRuns({ requirementId })
+    ])
+
+    if (filesResult.status === 'fulfilled') {
+      setRequirementArtifactsByRequirementId((prev) => ({
+        ...prev,
+        [requirementId]: filesResult.value
+      }))
+    }
+
+    if (stageRunsResult.status === 'fulfilled') {
+      setRequirementStageRunsByRequirementId((prev) => ({
+        ...prev,
+        [requirementId]: stageRunsResult.value
+      }))
+      return
+    }
+
+    throw stageRunsResult.reason
   }, [])
 
   const refreshTaskStageTrace = useCallback(async (stageRunId: number, silent = false) => {
@@ -1443,6 +1566,8 @@ function Workspace({
   }, [activeTaskId, filteredTasks])
   const selectedTaskId = selectedTask?.id ?? null
   const selectedTaskWaitingContext = selectedTask?.waitingContext ?? null
+  const selectedRequirementId = selectedRequirement?.id ?? null
+  const selectedRequirementWaitingContext = selectedRequirement?.waitingContext ?? null
   const isTaskDetailMode = activeListType === 'task' && Boolean(selectedTask)
   const hasRunningStageCard = useMemo(() => {
     if (!selectedTask) {
@@ -1478,14 +1603,38 @@ function Workspace({
       closeTaskStageTraceModal()
       setTaskHumanInput('')
       setTaskHumanConversationError('')
+      setTaskHumanAwaitingAssistant(null)
     }
   }, [activeListType])
 
   useEffect(() => {
     if (activeListType !== 'requirement') {
       closeRequirementStageTraceModal()
+      setRequirementHumanAwaitingAssistant(null)
     }
   }, [activeListType])
+
+  useEffect(() => {
+    if (!taskHumanAwaitingAssistant) {
+      return
+    }
+
+    const messages = taskHumanMessagesByTaskId[taskHumanAwaitingAssistant.taskId] ?? []
+    if (countAssistantMessages(messages) > taskHumanAwaitingAssistant.baselineAssistantCount) {
+      setTaskHumanAwaitingAssistant(null)
+    }
+  }, [taskHumanAwaitingAssistant, taskHumanMessagesByTaskId])
+
+  useEffect(() => {
+    if (!requirementHumanAwaitingAssistant) {
+      return
+    }
+
+    const messages = requirementHumanMessagesByRequirementId[requirementHumanAwaitingAssistant.requirementId] ?? []
+    if (countAssistantMessages(messages) > requirementHumanAwaitingAssistant.baselineAssistantCount) {
+      setRequirementHumanAwaitingAssistant(null)
+    }
+  }, [requirementHumanAwaitingAssistant, requirementHumanMessagesByRequirementId])
 
   useEffect(() => {
     if (!selectedTask) {
@@ -1710,7 +1859,7 @@ function Workspace({
 
         setTaskHumanMessagesByTaskId((prev) => ({
           ...prev,
-          [selectedTaskId]: data.messages
+          [selectedTaskId]: mergeTaskHumanMessages(prev[selectedTaskId] ?? [], data.messages)
         }))
       })
       .catch((error) => {
@@ -2065,27 +2214,31 @@ function Workspace({
     }
 
     const stageRuns = requirementStageRunsByRequirementId[selectedRequirement.id] ?? []
+    const artifactFiles = requirementArtifactsByRequirementId[selectedRequirement.id] ?? []
 
     return stageRuns.map((run) => {
       const stageLabel = getRequirementStageLabel(run.stageKey)
       const stageTitle = run.round > 1 ? t(`${stageLabel}（第${run.round}轮）`, `${stageLabel} (Round ${run.round})`) : stageLabel
       const endAt = run.endAt
       const duration = (endAt ?? requirementDurationNowMs) - run.startAt
-        return {
-          id: `${run.stageKey}-${run.round}-${run.id}`,
-          stageRunId: run.id,
-          stageKey: run.stageKey,
-          stageLabel: stageTitle,
-          round: run.round,
-          startAt: run.startAt,
-          endAt,
-          resultStatus: run.resultStatus,
-          failureReason: run.failureReason,
-          durationText: formatDurationMs(duration),
-          agentSessionId: run.agentSessionId
-        }
-      })
-  }, [requirementDurationNowMs, requirementStageRunsByRequirementId, selectedRequirement])
+      const normalizedArtifactFileNames = run.artifactFileNames.length > 0 ? run.artifactFileNames : [getDefaultRequirementArtifactFileName(run.stageKey)]
+      const stageArtifacts = artifactFiles.filter((file) => normalizedArtifactFileNames.includes(file.fileName))
+      return {
+        id: `${run.stageKey}-${run.round}-${run.id}`,
+        stageRunId: run.id,
+        stageKey: run.stageKey,
+        stageLabel: stageTitle,
+        round: run.round,
+        startAt: run.startAt,
+        endAt,
+        resultStatus: run.resultStatus,
+        failureReason: run.failureReason,
+        durationText: formatDurationMs(duration),
+        agentSessionId: run.agentSessionId,
+        artifactFiles: stageArtifacts
+      }
+    })
+  }, [requirementArtifactsByRequirementId, requirementDurationNowMs, requirementStageRunsByRequirementId, selectedRequirement, t])
   const taskFlowStageCards = useMemo<StageFlowCardViewModel[]>(
     () =>
       selectedTaskFlowCards.map((card) => ({
@@ -2166,7 +2319,9 @@ function Workspace({
   const shouldShowTaskTraceToolWaitingDots =
     taskStageTraceModal.open &&
     !taskStageTraceModal.error &&
-    (taskStageTraceModal.loading || (!taskTraceHasAssistantMessage && taskTraceHasPendingToolCall))
+    (taskStageTraceModal.loading ||
+      (!taskTraceHasAssistantMessage && taskTraceHasPendingToolCall) ||
+      (taskTraceIsWaitingHumanMode && !!selectedTask && taskHumanAwaitingAssistant?.taskId === selectedTask.id))
   const requirementTraceHasAssistantMessage = useMemo(
     () => requirementTraceMessages.some((message) => message.role === 'assistant'),
     [requirementTraceMessages]
@@ -2178,7 +2333,11 @@ function Workspace({
   const shouldShowRequirementTraceToolWaitingDots =
     requirementStageTraceModal.open &&
     !requirementStageTraceModal.error &&
-    (requirementStageTraceModal.loading || (!requirementTraceHasAssistantMessage && requirementTraceHasPendingToolCall))
+    (requirementStageTraceModal.loading ||
+      (!requirementTraceHasAssistantMessage && requirementTraceHasPendingToolCall) ||
+      (requirementTraceIsWaitingHumanMode &&
+        !!selectedRequirement &&
+        requirementHumanAwaitingAssistant?.requirementId === selectedRequirement.id))
 
   const openRequirementDetail = (requirementId: number) => {
     if (activeListType !== 'requirement') {
@@ -2246,6 +2405,18 @@ function Workspace({
         return
       }
 
+      const cachedHumanMessages = taskHumanMessagesByTaskId[taskId] ?? []
+      const hasCachedHumanMessages = cachedHumanMessages.length > 0
+      if (
+        taskStageTraceModal.open &&
+        taskStageTraceModal.humanMode &&
+        taskStageTraceModal.taskId === taskId &&
+        taskStageTraceModal.stageRunId === waitingCard.stageRunId
+      ) {
+        focusTaskHumanInput()
+        return
+      }
+
       setTaskStageTraceModal({
         open: true,
         stageRunId: waitingCard.stageRunId,
@@ -2253,14 +2424,14 @@ function Workspace({
         humanMode: true,
         stageLabel: waitingCard.stageLabel,
         round: waitingCard.round,
-        loading: true,
+        loading: !hasCachedHumanMessages,
         error: '',
-        messages: []
+        messages: cachedHumanMessages
       })
-      void refreshTaskStageTrace(waitingCard.stageRunId)
+      void refreshTaskStageTrace(waitingCard.stageRunId, hasCachedHumanMessages)
       focusTaskHumanInput()
     },
-    [activeListType, filteredTasks, focusTaskHumanInput, openTaskDetail, refreshTaskStageTrace, selectedTaskFlowCards]
+    [activeListType, filteredTasks, focusTaskHumanInput, openTaskDetail, refreshTaskStageTrace, selectedTaskFlowCards, taskHumanMessagesByTaskId, taskStageTraceModal]
   )
 
   const openRequirementHumanConversation = useCallback(
@@ -2291,6 +2462,18 @@ function Workspace({
             ? t(`${stageLabel}（第${waitingStageRun.round}轮）`, `${stageLabel} (Round ${waitingStageRun.round})`)
             : stageLabel
 
+        const cachedHumanMessages = requirementHumanMessagesByRequirementId[requirementId] ?? []
+        const hasCachedHumanMessages = cachedHumanMessages.length > 0
+        if (
+          requirementStageTraceModal.open &&
+          requirementStageTraceModal.humanMode &&
+          requirementStageTraceModal.requirementId === requirementId &&
+          requirementStageTraceModal.stageRunId === waitingStageRun.id
+        ) {
+          focusTaskHumanInput()
+          return
+        }
+
         setRequirementStageTraceModal({
           open: true,
           stageRunId: waitingStageRun.id,
@@ -2299,17 +2482,26 @@ function Workspace({
           humanMode: true,
           stageLabel: stageTitle,
           round: waitingStageRun.round,
-          loading: true,
+          loading: !hasCachedHumanMessages,
           error: '',
-          messages: []
+          messages: cachedHumanMessages
         })
-        void refreshRequirementStageTrace(waitingStageRun.id)
+        void refreshRequirementStageTrace(waitingStageRun.id, hasCachedHumanMessages)
         focusTaskHumanInput()
       } catch {
         // ignore; timeline refresh fallback already handled elsewhere
       }
     },
-    [activeListType, focusTaskHumanInput, refreshRequirementStageTrace, selectRequirement, selectedRequirement?.id, t]
+    [
+      activeListType,
+      focusTaskHumanInput,
+      refreshRequirementStageTrace,
+      requirementHumanMessagesByRequirementId,
+      requirementStageTraceModal,
+      selectRequirement,
+      selectedRequirement?.id,
+      t
+    ]
   )
 
   const closeArtifactModal = () => {
@@ -2368,6 +2560,7 @@ function Workspace({
       error: '',
       messages: []
     })
+    setTaskHumanAwaitingAssistant(null)
     setTaskTraceDetailModal({
       open: false,
       title: '',
@@ -2389,6 +2582,7 @@ function Workspace({
       error: '',
       messages: []
     })
+    setRequirementHumanAwaitingAssistant(null)
     setRequirementHumanInput('')
     setRequirementHumanConversationError('')
     setTaskTraceDetailModal({
@@ -2514,6 +2708,24 @@ function Workspace({
     }
   }
 
+  const onPreviewRequirementArtifact = async (requirementId: number, fileName: string) => {
+    setArtifactModalOpen(true)
+    setArtifactModalLoading(true)
+    setArtifactModalError('')
+    setArtifactModalFileName(fileName)
+    setArtifactModalContent('')
+    try {
+      const content = await readRequirementArtifact({ requirementId, fileName })
+      setArtifactModalContent(content)
+    } catch (error) {
+      setArtifactModalError(
+        error instanceof Error ? error.message : t('读取产物失败', 'Failed to load artifact')
+      )
+    } finally {
+      setArtifactModalLoading(false)
+    }
+  }
+
   const onSendTaskHumanConversation = async () => {
     if (!selectedTask || !selectedTask.waitingContext) {
       return
@@ -2523,18 +2735,29 @@ function Workspace({
     if (!message) {
       return
     }
+    const baselineAssistantCount = countAssistantMessages(taskHumanMessagesByTaskId[selectedTask.id] ?? [])
+    setTaskHumanInput('')
 
     setTaskHumanConversationLoading(true)
     setTaskHumanConversationError('')
+    setTaskHumanAwaitingAssistant({
+      taskId: selectedTask.id,
+      baselineAssistantCount
+    })
+
+    setTaskHumanMessagesByTaskId((prev) => ({
+      ...prev,
+      [selectedTask.id]: appendTaskHumanMessageIfMissing(prev[selectedTask.id] ?? [], message)
+    }))
 
     try {
       const data = await sendTaskHumanConversation(selectedTask.id, message)
       setTaskHumanMessagesByTaskId((prev) => ({
         ...prev,
-        [selectedTask.id]: data.messages
+        [selectedTask.id]: mergeTaskHumanMessages(prev[selectedTask.id] ?? [], data.messages, { ensureInput: message })
       }))
-      setTaskHumanInput('')
     } catch (error) {
+      setTaskHumanAwaitingAssistant(null)
       setTaskHumanConversationError(error instanceof Error ? error.message : pickText('人工会话回复失败', 'Failed to reply in human conversation'))
     } finally {
       setTaskHumanConversationLoading(false)
@@ -2578,7 +2801,7 @@ function Workspace({
         }))
         setRequirementHumanMessagesByRequirementId((prev) => ({
           ...prev,
-          [requirementId]: converted
+          [requirementId]: mergeTaskHumanMessages(prev[requirementId] ?? [], converted)
         }))
       } catch (error) {
         setRequirementHumanConversationError(error instanceof Error ? error.message : pickText('读取人工会话失败', 'Failed to load human conversation'))
@@ -2591,23 +2814,24 @@ function Workspace({
 
   useEffect(() => {
     if (
-      !selectedRequirement ||
-      selectedRequirement.waitingContext !== 'prd_review_gate' ||
+      !selectedRequirementId ||
+      selectedRequirementWaitingContext !== 'prd_review_gate' ||
       !requirementStageTraceModal.open ||
       !requirementStageTraceModal.humanMode ||
-      requirementStageTraceModal.requirementId !== selectedRequirement.id
+      requirementStageTraceModal.requirementId !== selectedRequirementId
     ) {
       return
     }
 
-    void loadRequirementHumanConversation(selectedRequirement.id, requirementStageTraceModal.agentSessionId ?? undefined)
+    void loadRequirementHumanConversation(selectedRequirementId, requirementStageTraceModal.agentSessionId ?? undefined)
   }, [
     loadRequirementHumanConversation,
     requirementStageTraceModal.agentSessionId,
     requirementStageTraceModal.humanMode,
     requirementStageTraceModal.open,
     requirementStageTraceModal.requirementId,
-    selectedRequirement
+    selectedRequirementId,
+    selectedRequirementWaitingContext
   ])
 
   const onSendRequirementHumanConversation = async () => {
@@ -2619,9 +2843,19 @@ function Workspace({
     if (!message) {
       return
     }
+    const baselineAssistantCount = countAssistantMessages(requirementHumanMessagesByRequirementId[selectedRequirement.id] ?? [])
+    setRequirementHumanInput('')
 
     setRequirementHumanConversationLoading(true)
     setRequirementHumanConversationError('')
+    setRequirementHumanAwaitingAssistant({
+      requirementId: selectedRequirement.id,
+      baselineAssistantCount
+    })
+    setRequirementHumanMessagesByRequirementId((prev) => ({
+      ...prev,
+      [selectedRequirement.id]: appendTaskHumanMessageIfMissing(prev[selectedRequirement.id] ?? [], message)
+    }))
     try {
       const data = await clarifyRequirement(selectedRequirement.id, message)
       const converted: TaskAgentTraceMessage[] = data.messages.map((item) => ({
@@ -2632,10 +2866,10 @@ function Workspace({
       }))
       setRequirementHumanMessagesByRequirementId((prev) => ({
         ...prev,
-        [selectedRequirement.id]: converted
+        [selectedRequirement.id]: mergeTaskHumanMessages(prev[selectedRequirement.id] ?? [], converted, { ensureInput: message })
       }))
-      setRequirementHumanInput('')
     } catch (error) {
+      setRequirementHumanAwaitingAssistant(null)
       setRequirementHumanConversationError(error instanceof Error ? error.message : pickText('人工会话回复失败', 'Failed to reply in human conversation'))
     } finally {
       setRequirementHumanConversationLoading(false)
@@ -4842,6 +5076,28 @@ function Workspace({
                         }
 
                         onOpenRequirementStageTraceModal(card)
+                      }}
+                      renderExtra={(cardId) => {
+                        const card = selectedRequirementFlowCards.find((item) => item.id === cardId)
+                        if (!card || card.artifactFiles.length === 0) {
+                          return null
+                        }
+
+                        return (
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <p className="text-xs text-slate-600">{t('交付产物', 'Artifacts')}:</p>
+                            {card.artifactFiles.map((artifact) => (
+                              <button
+                                key={`${card.id}-${artifact.fileName}`}
+                                type="button"
+                                className="inline-flex items-center rounded-md bg-sky-50 px-2 py-1 text-left text-xs text-sky-700 ring-1 ring-inset ring-sky-200 transition hover:bg-sky-100"
+                                onClick={() => void onPreviewRequirementArtifact(selectedRequirement.id, artifact.fileName)}
+                              >
+                                {artifact.fileName}
+                              </button>
+                            ))}
+                          </div>
+                        )
                       }}
                     />
                   </div>

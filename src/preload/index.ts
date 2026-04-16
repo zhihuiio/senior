@@ -56,6 +56,10 @@ import type {
   TaskArtifactListResult,
   TaskArtifactReadReq,
   TaskArtifactReadResult,
+  RequirementArtifactListReq,
+  RequirementArtifactListResult,
+  RequirementArtifactReadReq,
+  RequirementArtifactReadResult,
   TaskStageRunListReq,
   TaskStageRunListResult,
   TaskStageRunTraceGetReq,
@@ -98,6 +102,8 @@ export interface RendererApi {
   orchestrateTask(req: TaskOrchestrateReq): Promise<TaskOrchestrateResult>
   listTaskArtifacts(req: TaskArtifactListReq): Promise<TaskArtifactListResult>
   readTaskArtifact(req: TaskArtifactReadReq): Promise<TaskArtifactReadResult>
+  listRequirementArtifacts(req: RequirementArtifactListReq): Promise<RequirementArtifactListResult>
+  readRequirementArtifact(req: RequirementArtifactReadReq): Promise<RequirementArtifactReadResult>
   listTaskStageRuns(req: TaskStageRunListReq): Promise<TaskStageRunListResult>
   getTaskStageRunTrace(req: TaskStageRunTraceGetReq): Promise<TaskStageRunTraceGetResult>
   onRequirementStatusChanged(
@@ -207,6 +213,12 @@ const api: RendererApi = {
   },
   readTaskArtifact(req) {
     return ipcRenderer.invoke(IPC_CHANNELS.TASK_ARTIFACT_READ, req)
+  },
+  listRequirementArtifacts(req) {
+    return ipcRenderer.invoke(IPC_CHANNELS.REQUIREMENT_ARTIFACT_LIST, req)
+  },
+  readRequirementArtifact(req) {
+    return ipcRenderer.invoke(IPC_CHANNELS.REQUIREMENT_ARTIFACT_READ, req)
   },
   listTaskStageRuns(req) {
     return ipcRenderer.invoke(IPC_CHANNELS.TASK_STAGE_RUN_LIST, req)

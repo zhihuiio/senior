@@ -2,9 +2,22 @@ import type { Task } from '../../shared/types'
 
 export const REQUIREMENT_EVALUATION_AGENT_SYSTEM_PROMPT = `
 你是 Requirement Evaluation Agent，必须同时采用 PM 视角与研发视角评估需求。
-输入：需求描述 + 来源
-输出约束：请严格返回 JSON 对象，不要包含 markdown 或额外解释。
-返回格式：
+文件路径约定（相对当前项目根目录）：
+- 需求产物目录：.senior/requirements/<requirement_id>/
+- 本阶段输出：.senior/requirements/<requirement_id>/evaluation.json
+
+阶段输入（系统注入）：
+- 原始需求描述
+- 来源
+
+阶段输出（写入产物文件）：
+- .senior/requirements/<requirement_id>/evaluation.json
+
+输出约束：
+1. 只返回一个 JSON 对象，不要包含 markdown、代码块、额外解释。
+2. 字段必须完整且类型正确。
+
+evaluation.json 格式（必须严格匹配）：
 {
   "type": "evaluation",
   "result": "reasonable" | "unreasonable",
@@ -15,14 +28,30 @@ export const REQUIREMENT_EVALUATION_AGENT_SYSTEM_PROMPT = `
 1. PM 视角：目标是否明确、用户价值是否成立、范围是否合理。
 2. 研发视角：技术可行性、依赖与风险、实现边界是否可落地。
 3. result=reasonable 表示可进入 PRD 设计阶段；result=unreasonable 表示应取消。
-4. summary 必须简洁明确，指出关键判断依据。
+4. summary 必须简洁明确，指出关键判断依据，且可直接作为 evaluation.json 的结论字段落盘。
 `
 
 export const REQUIREMENT_PRD_DESIGN_AGENT_SYSTEM_PROMPT = `
 你是 Requirement PRD Designing Agent。
-输入：原始需求描述 + 来源
-输出约束：请严格返回 JSON 对象，不要包含 markdown 或额外解释。
-返回格式：
+文件路径约定（相对当前项目根目录）：
+- 需求产物目录：.senior/requirements/<requirement_id>/
+- 上游可读输入：.senior/requirements/<requirement_id>/evaluation.json
+- 上游可读输入：.senior/requirements/<requirement_id>/prd_review.json
+- 本阶段输出：.senior/requirements/<requirement_id>/prd.md
+
+阶段输入（系统注入）：
+- 原始需求描述
+- 来源
+- 可选：evaluation.json（需求评估结论）或 prd_review.json（上一轮评审结论）
+
+阶段输出（写入产物文件）：
+- prd.md（由返回 JSON 中的 prd 字段内容生成）
+
+输出约束：
+1. 只返回一个 JSON 对象，不要包含 markdown 代码块、额外解释。
+2. 字段必须完整且类型正确。
+
+返回格式（必须严格匹配）：
 {
   "type": "prd",
   "prd": "完整 PRD markdown 文本",
@@ -33,15 +62,30 @@ export const REQUIREMENT_PRD_DESIGN_AGENT_SYSTEM_PROMPT = `
 
 要求：
 1. subTasks 数量 1~N。默认不拆分，只有当需求明显过大或可并行时才拆分。
-2. prd 必须包含：一句话摘要、用户故事、验收条件、优先级建议。
+2. prd 字段必须是可直接写入 prd.md 的完整 markdown，必须包含：一句话摘要、用户故事、验收条件、优先级建议。
 3. 每个 subTask 必须可独立执行，标题不能为空。
 `
 
 export const REQUIREMENT_REVIEW_AGENT_SYSTEM_PROMPT = `
 你是 Requirement PRD Review Gate Agent。
-输入：需求上下文 + PRD + 子任务列表
-输出约束：请严格返回 JSON 对象，不要包含 markdown 或额外解释。
-返回格式：
+文件路径约定（相对当前项目根目录）：
+- 需求产物目录：.senior/requirements/<requirement_id>/
+- 上游可读输入：.senior/requirements/<requirement_id>/prd.md
+- 本阶段输出：.senior/requirements/<requirement_id>/prd_review.json
+
+阶段输入（系统注入）：
+- 需求上下文
+- prd.md 内容
+- 子任务列表
+
+阶段输出（写入产物文件）：
+- prd_review.json
+
+输出约束：
+1. 只返回一个 JSON 对象，不要包含 markdown、代码块、额外解释。
+2. 字段必须完整且类型正确。
+
+prd_review.json 格式（必须严格匹配）：
 {
   "type": "review",
   "result": "pass" | "fail",
@@ -49,7 +93,7 @@ export const REQUIREMENT_REVIEW_AGENT_SYSTEM_PROMPT = `
 }
 
 要求：
-1. 只审质量与拆分合理性，不改写 PRD。
+1. 只审质量与拆分合理性，不改写 prd.md 内容。
 2. fail 时 summary 必须明确指出问题点，便于打回重做。
 3. 研发视角必须评估技术可行性、实现复杂度与主要风险。
 4. 你运行在系统指定的当前项目目录下；若该目录不是空项目，你必须主动读取当前代码库信息（如 README、目录结构、关键配置）并结合项目领域与架构做适配性评估（兼容性、改动范围、约束冲突、演进成本）。
@@ -108,6 +152,8 @@ export const FREEFORM_AGENT_SYSTEM_PROMPT = `
 interface RequirementPromptInput {
   requirement: string
   source: string
+  evaluationJson?: string | null
+  prdReviewJson?: string | null
   promptMode?: 'full_context' | 'followup'
 }
 
@@ -128,7 +174,14 @@ export function buildRequirementUserPrompt(input: RequirementPromptInput): strin
 ${input.requirement}
 
 来源：
-${input.source}`
+${input.source}
+${formatContextBlock('最近一轮需求评估产物（evaluation.json）', input.evaluationJson ?? null)}${formatContextBlock(
+    '最近一轮 PRD 评审产物（prd_review.json）',
+    input.prdReviewJson ?? null
+  )}
+
+阶段产物约定：
+- 本阶段输出文件：prd.md（内容来自返回 JSON 的 prd 字段）`
 }
 
 export function buildRequirementEvaluationUserPrompt(input: { requirement: string; source: string }): string {
@@ -136,7 +189,10 @@ export function buildRequirementEvaluationUserPrompt(input: { requirement: strin
 ${input.requirement}
 
 来源：
-${input.source}`
+${input.source}
+
+阶段产物约定：
+- 本阶段输出文件：evaluation.json`
 }
 
 export function buildRequirementReviewUserPrompt(input: {
@@ -151,11 +207,14 @@ ${input.requirement}
 来源：
 ${input.source}
 
-PRD：
+PRD（对应 prd.md）：
 ${input.prd}
 
-子任务：
-${JSON.stringify(input.subTasks, null, 2)}`
+子任务（结构化输入）：
+${JSON.stringify(input.subTasks, null, 2)}
+
+阶段产物约定：
+- 本阶段输出文件：prd_review.json`
 }
 
 export function buildArchDesignUserPrompt(task: Task, techReviewJson: string | null, humanNote: string | null = null): string {

@@ -36,6 +36,19 @@ interface TaskHumanAgentProgress {
   sessionId: string | null
 }
 
+function normalizeComparableText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function hasUserTraceMessage(messages: TaskAgentTraceMessage[], note: string): boolean {
+  const target = normalizeComparableText(note)
+  if (!target) {
+    return true
+  }
+
+  return messages.some((item) => item.role === 'user' && normalizeComparableText(item.content) === target)
+}
+
 function resolveTaskProjectPath(task: Task): string {
   const project = getProject(task.projectId)
   if (!project) {
@@ -292,16 +305,57 @@ function buildUserTraceMessage(note: string): TaskAgentTraceMessage {
   return {
     id: `human-${Date.now()}`,
     role: 'user',
+    messageType: 'text',
     content: note
   }
 }
 
-function mergeMessages(history: TaskAgentTraceMessage[], fallbackUserMessage: TaskAgentTraceMessage): TaskAgentTraceMessage[] {
-  if (history.length > 0) {
-    return history
+function ensureUserTraceMessage(messages: TaskAgentTraceMessage[], note: string): TaskAgentTraceMessage[] {
+  if (hasUserTraceMessage(messages, note)) {
+    return messages
   }
 
-  return [fallbackUserMessage]
+  return [...messages, buildUserTraceMessage(note)]
+}
+
+function createUserConversationRecord(note: string): Record<string, unknown> {
+  return {
+    type: 'user',
+    message: {
+      content: [{ type: 'text', text: note }]
+    }
+  }
+}
+
+function ensureUserConversationRecord(conversations: unknown[], note: string): unknown[] {
+  const normalized = normalizeComparableText(note)
+  if (!normalized) {
+    return conversations
+  }
+
+  const parsed = parseTaskTraceMessages(conversations)
+  if (hasUserTraceMessage(parsed, normalized)) {
+    return conversations
+  }
+
+  return [...conversations, createUserConversationRecord(normalized)]
+}
+
+function appendMissingUserMessages(base: TaskAgentTraceMessage[], fallback: TaskAgentTraceMessage[]): TaskAgentTraceMessage[] {
+  let result = [...base]
+  for (const item of fallback) {
+    if (item.role !== 'user') {
+      continue
+    }
+
+    if (hasUserTraceMessage(result, item.content)) {
+      continue
+    }
+
+    result = [...result, { ...item, messageType: item.messageType ?? 'text' }]
+  }
+
+  return result
 }
 
 export async function getTaskHumanConversation(taskId: number): Promise<TaskHumanConversationReadResult> {
@@ -311,6 +365,7 @@ export async function getTaskHumanConversation(taskId: number): Promise<TaskHuma
 
   const context = ensureWaitingTask(taskId)
   const { task, stageRunId, stageSessionId, stageHistory } = context
+  const dbMessages = parseTaskTraceMessages(stageHistory)
 
   if (stageSessionId) {
     try {
@@ -318,7 +373,7 @@ export async function getTaskHumanConversation(taskId: number): Promise<TaskHuma
       if (messages.length > 0) {
         return {
           task,
-          messages
+          messages: appendMissingUserMessages(messages, dbMessages)
         }
       }
     } catch {
@@ -326,7 +381,6 @@ export async function getTaskHumanConversation(taskId: number): Promise<TaskHuma
     }
   }
 
-  const dbMessages = parseTaskTraceMessages(stageHistory)
   return {
     task,
     messages: dbMessages
@@ -357,24 +411,25 @@ export async function replyTaskHumanConversation(input: { taskId: number; messag
     cwd
   })
 
-  const mergedConversations = [...stageHistory, ...agentResult.conversations]
+  const mergedConversations = ensureUserConversationRecord([...stageHistory, ...agentResult.conversations], note)
   persistWaitingStageTrace(stageRunId, mergedConversations, agentResult.sessionId)
 
   await writeCurrentStageArtifact(task.id, stageKey, normalizeHumanAgentResult(agentResult.resultText))
 
-  let messages: TaskAgentTraceMessage[] = []
+  const persistedMessages = parseTaskTraceMessages(mergedConversations)
+  let messages: TaskAgentTraceMessage[] = persistedMessages
   if (agentResult.sessionId) {
     try {
-      messages = await parseTaskMessagesFromSession(agentResult.sessionId)
+      const sessionMessages = await parseTaskMessagesFromSession(agentResult.sessionId)
+      if (sessionMessages.length > 0) {
+        messages = appendMissingUserMessages(sessionMessages, persistedMessages)
+      }
     } catch {
       // fallback below
     }
   }
 
-  if (messages.length === 0) {
-    const parsed = parseTaskTraceMessages(mergedConversations)
-    messages = mergeMessages(parsed, buildUserTraceMessage(note))
-  }
+  messages = ensureUserTraceMessage(messages, note)
 
   return {
     task: getTaskDetail(task.id),
