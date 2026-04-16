@@ -327,12 +327,27 @@ async function runRequirementAutoProcessorTick(): Promise<void> {
     }
 
     const requirements = getRequirementsGlobal();
+    const queuedRequirementIdsWithoutTasks = new Set<number>(
+      db
+        .prepare(
+          `SELECT r.id
+           FROM requirements r
+           LEFT JOIN tasks t ON t.requirement_id = r.id
+           WHERE r.status = 'queued'
+           GROUP BY r.id
+           HAVING COUNT(t.id) = 0`,
+        )
+        .all()
+        .map((row) => Number((row as { id: number }).id))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    );
     const candidate = requirements.find(
       (item: Requirement) =>
         item.status === "pending" ||
         item.status === "evaluating" ||
         (item.status === "prd_designing" && !item.waitingContext) ||
-        item.status === "prd_reviewing",
+        item.status === "prd_reviewing" ||
+        queuedRequirementIdsWithoutTasks.has(item.id),
     );
 
     if (!candidate) {

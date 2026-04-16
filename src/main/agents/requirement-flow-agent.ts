@@ -336,13 +336,28 @@ function findWaitingRequirementStageRun(requirementId: number): {
   }
 }
 
-function upsertTasksForQueuedRequirement(requirement: Requirement): void {
-  if (requirement.status !== 'queued') {
-    return
+async function buildQueuedTaskDrafts(requirement: Requirement): Promise<Array<{ title: string; content: string }>> {
+  const standardizedData = requirement.standardizedData
+  if (standardizedData?.type === 'prd') {
+    if (standardizedData.subTasks.length > 0) {
+      return standardizedData.subTasks
+    }
+
+    return [{ title: requirement.title, content: standardizedData.prd }]
   }
 
-  const standardizedData = requirement.standardizedData
-  if (!standardizedData || standardizedData.type !== 'prd') {
+  // Compatibility fallback: review stage may overwrite standardizedData with review JSON.
+  const latestPrd = await readLatestRequirementStageArtifact(requirement, 'prd_designing')
+  if (latestPrd?.trim()) {
+    return [{ title: requirement.title, content: latestPrd }]
+  }
+
+  // Last resort to avoid a queued requirement getting stuck with zero tasks.
+  return [{ title: requirement.title, content: requirement.content }]
+}
+
+async function upsertTasksForQueuedRequirement(requirement: Requirement): Promise<void> {
+  if (requirement.status !== 'queued') {
     return
   }
 
@@ -351,7 +366,7 @@ function upsertTasksForQueuedRequirement(requirement: Requirement): void {
     return
   }
 
-  const drafts = standardizedData.subTasks.length > 0 ? standardizedData.subTasks : [{ title: requirement.title, content: standardizedData.prd }]
+  const drafts = await buildQueuedTaskDrafts(requirement)
   for (const draft of drafts) {
     if (!draft.title.trim()) {
       continue
@@ -649,7 +664,7 @@ export async function processRequirement(input: ProcessRequirementInput): Promis
   }
 
   if (requirement.status === 'queued') {
-    upsertTasksForQueuedRequirement(requirement)
+    await upsertTasksForQueuedRequirement(requirement)
     return {
       requirement,
       result: { type: 'review', resultType: 'pass' }
@@ -671,7 +686,7 @@ export async function processRequirement(input: ProcessRequirementInput): Promis
   }
 
   if (requirement.status === 'queued') {
-    upsertTasksForQueuedRequirement(requirement)
+    await upsertTasksForQueuedRequirement(requirement)
     return {
       requirement,
       result: { type: 'review', resultType: 'pass' }
