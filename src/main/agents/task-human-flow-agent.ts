@@ -1,4 +1,5 @@
 import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
+import { join } from 'node:path'
 import type { Task, TaskAgentTraceMessage } from '../../shared/types'
 import { parseAgentConversations, parseTaskTraceMessages, parseTaskTraceMessagesFromSessionList, stringifyAgentConversations } from '../agent-message-utils'
 import { readArtifactIfExists, resolveTaskArtifactDir, writeArtifact } from '../task-artifact-service'
@@ -193,6 +194,7 @@ async function runTaskHumanAgent(input: {
   task: Task
   resumeSessionId?: string
   artifactDir: string
+  artifactOutputPath: string
   note: string
   stageRunId: number
   cwd: string
@@ -213,12 +215,18 @@ async function runTaskHumanAgent(input: {
 
   const prompt =
     stage === 'arch_designing'
-      ? buildArchDesignUserPrompt(task, await readLatestStageArtifact(task.id, artifactDir, 'tech_reviewing'), note)
+      ? buildArchDesignUserPrompt(
+          task,
+          await readLatestStageArtifact(task.id, artifactDir, 'tech_reviewing'),
+          input.artifactOutputPath,
+          note
+        )
       : buildCodingUserPrompt(
           task,
           await readLatestStageArtifact(task.id, artifactDir, 'arch_designing'),
           await readLatestStageArtifact(task.id, artifactDir, 'tech_reviewing'),
           await readLatestStageArtifact(task.id, artifactDir, 'qa_reviewing'),
+          input.artifactOutputPath,
           note
         )
 
@@ -401,11 +409,17 @@ export async function replyTaskHumanConversation(input: { taskId: number; messag
   const { task, stageRunId, stageKey, stageSessionId, stageHistory } = context
   const cwd = resolveTaskProjectPath(task)
   const artifactDir = await resolveTaskArtifactDir(task.id)
+  const artifactFileName = resolveCurrentStageArtifactFileName(task.id, stageKey)
+  if (!artifactFileName) {
+    throw new Error('无法解析当前阶段产物文件名')
+  }
+  const artifactOutputPath = join(artifactDir, artifactFileName)
   const agentResult = await runTaskHumanAgent({
     stageKey,
     task,
     resumeSessionId: stageSessionId ?? undefined,
     artifactDir,
+    artifactOutputPath,
     note,
     stageRunId,
     cwd

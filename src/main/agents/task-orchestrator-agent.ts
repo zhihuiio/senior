@@ -1,4 +1,5 @@
 import { AgentRunnerError, runAgentQuery } from './agent-runner'
+import { join } from 'node:path'
 import type { Task, TaskStatus } from '../../shared/types'
 import { getDb } from '../db'
 import { getProject, ProjectServiceError } from '../project-service'
@@ -143,9 +144,15 @@ function buildReviewArtifact(result: TaskAgentResult): string {
 async function runArchDesignAgent(
   task: Task,
   techReviewJson: string | null,
+  artifactOutputPath: string,
   options?: TaskAgentRunOptions
 ): Promise<TaskAgentResult> {
-  return runTaskAgent(TASK_ARCH_DESIGN_AGENT_SYSTEM_PROMPT, buildArchDesignUserPrompt(task, techReviewJson), true, options)
+  return runTaskAgent(
+    TASK_ARCH_DESIGN_AGENT_SYSTEM_PROMPT,
+    buildArchDesignUserPrompt(task, techReviewJson, artifactOutputPath),
+    true,
+    options
+  )
 }
 
 async function runCodingAgent(
@@ -153,11 +160,12 @@ async function runCodingAgent(
   archDesign: string | null,
   techReviewJson: string | null,
   qaJson: string | null,
+  artifactOutputPath: string,
   options?: TaskAgentRunOptions
 ): Promise<TaskAgentResult> {
   return runTaskAgent(
     TASK_CODING_AGENT_SYSTEM_PROMPT,
-    buildCodingUserPrompt(task, archDesign, techReviewJson, qaJson),
+    buildCodingUserPrompt(task, archDesign, techReviewJson, qaJson, artifactOutputPath),
     true,
     options
   )
@@ -167,17 +175,43 @@ async function runDeployingAgent(
   task: Task,
   qaJson: string | null,
   codeMarkdown: string | null,
+  artifactOutputPath: string,
   options?: TaskAgentRunOptions
 ): Promise<TaskAgentResult> {
-  return runTaskAgent(TASK_DEPLOYING_AGENT_SYSTEM_PROMPT, buildDeployingUserPrompt(task, qaJson, codeMarkdown), true, options)
+  return runTaskAgent(
+    TASK_DEPLOYING_AGENT_SYSTEM_PROMPT,
+    buildDeployingUserPrompt(task, qaJson, codeMarkdown, artifactOutputPath),
+    true,
+    options
+  )
 }
 
-async function runTechReviewAgent(task: Task, archDesign: string | null, options?: TaskAgentRunOptions): Promise<TaskAgentResult> {
-  return runTaskAgent(TASK_TECH_REVIEW_AGENT_SYSTEM_PROMPT, buildTechReviewUserPrompt(task, archDesign), false, options)
+async function runTechReviewAgent(
+  task: Task,
+  archDesign: string | null,
+  artifactOutputPath: string,
+  options?: TaskAgentRunOptions
+): Promise<TaskAgentResult> {
+  return runTaskAgent(
+    TASK_TECH_REVIEW_AGENT_SYSTEM_PROMPT,
+    buildTechReviewUserPrompt(task, archDesign, artifactOutputPath),
+    false,
+    options
+  )
 }
 
-async function runQaReviewAgent(task: Task, codeMarkdown: string | null, options?: TaskAgentRunOptions): Promise<TaskAgentResult> {
-  return runTaskAgent(TASK_QA_REVIEW_AGENT_SYSTEM_PROMPT, buildQaReviewUserPrompt(task, codeMarkdown), false, options)
+async function runQaReviewAgent(
+  task: Task,
+  codeMarkdown: string | null,
+  artifactOutputPath: string,
+  options?: TaskAgentRunOptions
+): Promise<TaskAgentResult> {
+  return runTaskAgent(
+    TASK_QA_REVIEW_AGENT_SYSTEM_PROMPT,
+    buildQaReviewUserPrompt(task, codeMarkdown, artifactOutputPath),
+    false,
+    options
+  )
 }
 
 async function writeStageArtifact(task: Task, stageKey: OrchestratableTaskStatus, content: string): Promise<void> {
@@ -301,6 +335,7 @@ async function persistLatestStageRunTrace(taskId: number, stageKey: TaskStatus, 
 interface StageExecutionContext {
   task: Task
   artifactDir: string
+  artifactOutputPath: string
   stageKey: OrchestratableTaskStatus
   cwd: string
 }
@@ -328,9 +363,9 @@ function notifyTaskTransition(options: OrchestrateTaskOptions | undefined, befor
 }
 
 const STAGE_RUNNERS: Record<OrchestratableTaskStatus, (context: StageExecutionContext) => Promise<StageExecutionOutput>> = {
-  arch_designing: async ({ task, artifactDir, stageKey, cwd }) => {
+  arch_designing: async ({ task, artifactDir, artifactOutputPath, stageKey, cwd }) => {
     const techReviewJson = await readLatestStageArtifact(task.id, artifactDir, 'tech_reviewing')
-    const result = await runArchDesignAgent(task, techReviewJson, {
+    const result = await runArchDesignAgent(task, techReviewJson, artifactOutputPath, {
       cwd,
       onProgress: createStageRunTraceProgressHandler(task.id, stageKey)
     })
@@ -341,9 +376,9 @@ const STAGE_RUNNERS: Record<OrchestratableTaskStatus, (context: StageExecutionCo
       nextAction: 'arch_done'
     }
   },
-  tech_reviewing: async ({ task, artifactDir, stageKey, cwd }) => {
+  tech_reviewing: async ({ task, artifactDir, artifactOutputPath, stageKey, cwd }) => {
     const archDesign = await readLatestStageArtifact(task.id, artifactDir, 'arch_designing')
-    const result = await runTechReviewAgent(task, archDesign, {
+    const result = await runTechReviewAgent(task, archDesign, artifactOutputPath, {
       cwd,
       onProgress: createStageRunTraceProgressHandler(task.id, stageKey)
     })
@@ -354,11 +389,11 @@ const STAGE_RUNNERS: Record<OrchestratableTaskStatus, (context: StageExecutionCo
       nextAction: result.pass ? 'review_pass' : 'review_fail'
     }
   },
-  coding: async ({ task, artifactDir, stageKey, cwd }) => {
+  coding: async ({ task, artifactDir, artifactOutputPath, stageKey, cwd }) => {
     const archDesign = await readLatestStageArtifact(task.id, artifactDir, 'arch_designing')
     const techReviewJson = await readLatestStageArtifact(task.id, artifactDir, 'tech_reviewing')
     const qaJson = await readLatestStageArtifact(task.id, artifactDir, 'qa_reviewing')
-    const result = await runCodingAgent(task, archDesign, techReviewJson, qaJson, {
+    const result = await runCodingAgent(task, archDesign, techReviewJson, qaJson, artifactOutputPath, {
       cwd,
       onProgress: createStageRunTraceProgressHandler(task.id, stageKey)
     })
@@ -369,9 +404,9 @@ const STAGE_RUNNERS: Record<OrchestratableTaskStatus, (context: StageExecutionCo
       nextAction: 'coding_done'
     }
   },
-  qa_reviewing: async ({ task, artifactDir, stageKey, cwd }) => {
+  qa_reviewing: async ({ task, artifactDir, artifactOutputPath, stageKey, cwd }) => {
     const codeMarkdown = await readLatestStageArtifact(task.id, artifactDir, 'coding')
-    const result = await runQaReviewAgent(task, codeMarkdown, {
+    const result = await runQaReviewAgent(task, codeMarkdown, artifactOutputPath, {
       cwd,
       onProgress: createStageRunTraceProgressHandler(task.id, stageKey)
     })
@@ -382,10 +417,10 @@ const STAGE_RUNNERS: Record<OrchestratableTaskStatus, (context: StageExecutionCo
       nextAction: result.pass ? 'qa_pass' : 'qa_fail'
     }
   },
-  deploying: async ({ task, artifactDir, stageKey, cwd }) => {
+  deploying: async ({ task, artifactDir, artifactOutputPath, stageKey, cwd }) => {
     const qaJson = await readLatestStageArtifact(task.id, artifactDir, 'qa_reviewing')
     const codeMarkdown = await readLatestStageArtifact(task.id, artifactDir, 'coding')
-    const result = await runDeployingAgent(task, qaJson, codeMarkdown, {
+    const result = await runDeployingAgent(task, qaJson, codeMarkdown, artifactOutputPath, {
       cwd,
       onProgress: createStageRunTraceProgressHandler(task.id, stageKey)
     })
@@ -407,9 +442,12 @@ async function runStage(
 ): Promise<void> {
   try {
     const runner = STAGE_RUNNERS[stageKey]
+    const fileName = resolveCurrentStageArtifactFileName(task.id, stageKey) ?? STAGE_FALLBACK_ARTIFACT_FILE_NAME[stageKey]
+    const artifactOutputPath = join(artifactDir, fileName)
     const output = await runner({
       task,
       artifactDir,
+      artifactOutputPath,
       stageKey,
       cwd
     })
