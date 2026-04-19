@@ -108,7 +108,7 @@ export const TASK_ARCH_DESIGN_AGENT_SYSTEM_PROMPT = `
 - 历史技术评审问题（如果有）：tech_review.json
 
 【输出要求】
-请写入 arch_design.md 文件，内容必须包含：
+输出可直接写入 arch_design.md 的 markdown 正文，内容必须包含：
 
 1. 接口定义（API）
 2. 数据结构
@@ -120,7 +120,8 @@ export const TASK_ARCH_DESIGN_AGENT_SYSTEM_PROMPT = `
 - 不要写代码
 - 不要解释
 - 如果存在历史技术评审问题，必须修复
-- 只生成 arch_design.md 文件内容，告诉用户文件路径
+- 不要自行创建/修改任何文件
+- 只输出 markdown 正文，不要输出“已写入文件”或文件路径说明
 `;
 
 export const TASK_TECH_REVIEW_AGENT_SYSTEM_PROMPT = `
@@ -131,7 +132,7 @@ export const TASK_TECH_REVIEW_AGENT_SYSTEM_PROMPT = `
 - 技术设计文档
 
 【任务】
-检查设计文档是否满足需求，并写入 tech_review.json 文件
+检查设计文档是否满足需求，并输出可直接写入 tech_review.json 的 JSON 内容
 
 【输出格式（必须严格 JSON，多个问题时请合并到 issues 数组）】
 
@@ -156,6 +157,7 @@ export const TASK_TECH_REVIEW_AGENT_SYSTEM_PROMPT = `
 - 只输出 JSON
 - 不要解释
 - 不要输出 markdown
+- 不要自行创建/修改任何文件
 `;
 
 export const TASK_CODING_AGENT_SYSTEM_PROMPT = `
@@ -175,6 +177,7 @@ export const TASK_CODING_AGENT_SYSTEM_PROMPT = `
 - tdd模式开发，先写单测用例，再写代码
 - 代码必须可运行
 - 覆盖边界情况
+- 不要自行创建/修改 code.md；仅输出可直接写入 code.md 的 markdown 正文
 `;
 
 export const TASK_QA_REVIEW_AGENT_SYSTEM_PROMPT = `
@@ -184,12 +187,14 @@ export const TASK_QA_REVIEW_AGENT_SYSTEM_PROMPT = `
 1) 端到端测试 case 是否覆盖并通过；
 2) 代码实现是否合理、耦合度是否过高。
 输出约束：若通过返回 "PASS: 原因"；若不通过返回 "FAIL: 原因"。
+- 不要自行创建/修改 qa.json；仅输出可直接写入 qa.json 的文本内容。
 `;
 
 export const TASK_DEPLOYING_AGENT_SYSTEM_PROMPT = `
 你是部署助手。
 请基于任务上下文完成部署步骤说明。
 输出约束：请返回 "PASS: 结论" 形式的文本结果。
+- 不要自行创建/修改 deploy.md；仅输出可直接写入 deploy.md 的文本内容。
 `;
 
 export const FREEFORM_AGENT_SYSTEM_PROMPT = `
@@ -273,9 +278,15 @@ ${JSON.stringify(input.subTasks, null, 2)}
 export function buildArchDesignUserPrompt(
   task: Task,
   techReviewJson: string | null,
+  artifactOutputPath: string,
   humanNote: string | null = null,
 ): string {
-  return `任务标题: ${task.title}\n任务描述: ${task.content}${formatContextBlock("最近一轮技术评审结果", techReviewJson)}${formatContextBlock("人工补充", humanNote)}`;
+  return `任务标题: ${task.title}\n任务描述: ${task.content}${formatContextBlock("最近一轮技术评审结果", techReviewJson)}${formatContextBlock("人工补充", humanNote)}
+
+阶段产物约定：
+- 标准任务产物目录：.senior/tasks/<task_id>/
+- 本阶段标准输出路径：${artifactOutputPath}
+- 仅输出可直接写入该文件的 markdown 正文`;
 }
 
 export function buildCodingUserPrompt(
@@ -283,29 +294,53 @@ export function buildCodingUserPrompt(
   archDesign: string | null,
   techReviewJson: string | null,
   qaJson: string | null,
+  artifactOutputPath: string,
   humanNote: string | null = null,
 ): string {
-  return `任务标题: ${task.title}\n任务描述: ${task.content}${formatContextBlock("最近一轮架构设计产物", archDesign)}${formatContextBlock("最近一轮技术评审结果", techReviewJson)}${formatContextBlock("最近一轮 QA 结果", qaJson)}${formatContextBlock("人工补充", humanNote)}`;
+  return `任务标题: ${task.title}\n任务描述: ${task.content}${formatContextBlock("最近一轮架构设计产物", archDesign)}${formatContextBlock("最近一轮技术评审结果", techReviewJson)}${formatContextBlock("最近一轮 QA 结果", qaJson)}${formatContextBlock("人工补充", humanNote)}
+
+阶段产物约定：
+- 标准任务产物目录：.senior/tasks/<task_id>/
+- 本阶段标准输出路径：${artifactOutputPath}
+- 仅输出可直接写入该文件的 markdown 正文`;
 }
 
 export function buildDeployingUserPrompt(
   task: Task,
   qaJson: string | null,
   codeMarkdown: string | null,
+  artifactOutputPath: string,
 ): string {
-  return `任务标题: ${task.title}${formatContextBlock("最近一轮 QA 结果", qaJson)}${formatContextBlock("最近一轮编码产出", codeMarkdown)}`;
+  return `任务标题: ${task.title}${formatContextBlock("最近一轮 QA 结果", qaJson)}${formatContextBlock("最近一轮编码产出", codeMarkdown)}
+
+阶段产物约定：
+- 标准任务产物目录：.senior/tasks/<task_id>/
+- 本阶段标准输出路径：${artifactOutputPath}
+- 仅输出可直接写入该文件的文本内容`;
 }
 
 export function buildTechReviewUserPrompt(
   task: Task,
   archDesign: string | null,
+  artifactOutputPath: string,
 ): string {
-  return `任务标题: ${task.title}\n任务描述: ${task.content}${formatContextBlock("最近一轮架构设计产物", archDesign)}`;
+  return `任务标题: ${task.title}\n任务描述: ${task.content}${formatContextBlock("最近一轮架构设计产物", archDesign)}
+
+阶段产物约定：
+- 标准任务产物目录：.senior/tasks/<task_id>/
+- 本阶段标准输出路径：${artifactOutputPath}
+- 仅输出可直接写入该文件的 JSON 内容`;
 }
 
 export function buildQaReviewUserPrompt(
   task: Task,
   codeMarkdown: string | null,
+  artifactOutputPath: string,
 ): string {
-  return `任务标题: ${task.title}\n任务描述: ${task.content}${formatContextBlock("最近一轮编码产出", codeMarkdown)}`;
+  return `任务标题: ${task.title}\n任务描述: ${task.content}${formatContextBlock("最近一轮编码产出", codeMarkdown)}
+
+阶段产物约定：
+- 标准任务产物目录：.senior/tasks/<task_id>/
+- 本阶段标准输出路径：${artifactOutputPath}
+- 仅输出可直接写入该文件的文本内容`;
 }
