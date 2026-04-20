@@ -1,4 +1,3 @@
-import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import { join } from 'node:path'
 import type { Task, TaskAgentTraceMessage } from '../../shared/types'
 import { parseAgentConversations, parseTaskTraceMessages, parseTaskTraceMessagesFromSessionList, stringifyAgentConversations } from '../agent-message-utils'
@@ -15,6 +14,7 @@ import { getDb } from '../db'
 import { getProject } from '../project-service'
 import { updateTaskStageRunAgentSessionId, updateTaskStageRunAgentTrace } from '../task-stage-run-repo'
 import { emitTaskStageTraceChanged } from '../task-stage-trace-events'
+import { detectAgentSdkTypeFromConversations, getAgentSessionMessages } from './agent-runner'
 
 interface TaskHumanConversationReadResult {
   task: Task
@@ -110,7 +110,7 @@ function ensureWaitingTask(taskId: number): { task: Task; stageRunId: number; st
 }
 
 async function parseTaskMessagesFromSession(sessionId: string): Promise<TaskAgentTraceMessage[]> {
-  const list = await getSessionMessages(sessionId)
+  const list = await getAgentSessionMessages({ sessionId })
   return parseTaskTraceMessagesFromSessionList(list)
 }
 
@@ -374,10 +374,16 @@ export async function getTaskHumanConversation(taskId: number): Promise<TaskHuma
   const context = ensureWaitingTask(taskId)
   const { task, stageRunId, stageSessionId, stageHistory } = context
   const dbMessages = parseTaskTraceMessages(stageHistory)
+  const sessionSdkType = detectAgentSdkTypeFromConversations(stageHistory) ?? undefined
 
   if (stageSessionId) {
     try {
-      const messages = await parseTaskMessagesFromSession(stageSessionId)
+      const messages = parseTaskTraceMessagesFromSessionList(
+        await getAgentSessionMessages({
+          sessionId: stageSessionId,
+          sdkType: sessionSdkType
+        })
+      )
       if (messages.length > 0) {
         return {
           task,

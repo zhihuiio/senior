@@ -1,7 +1,8 @@
-import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import type { RequirementStatus, TaskAgentTraceMessage } from '../../shared/types'
+import type { AgentSdkType } from '../../shared/types'
 import { getRequirementStageRunById } from '../requirement-stage-run-repo'
 import { parseAgentConversations, parseTaskTraceMessages, parseTaskTraceMessagesFromSessionList } from '../agent-message-utils'
+import { detectAgentSdkTypeFromConversations, getAgentSessionMessages } from './agent-runner'
 
 export interface RequirementStageRunTraceResult {
   stageRun: {
@@ -13,8 +14,11 @@ export interface RequirementStageRunTraceResult {
   messages: TaskAgentTraceMessage[]
 }
 
-async function toRequirementTraceMessagesFromSession(sessionId: string): Promise<TaskAgentTraceMessage[]> {
-  const list = await getSessionMessages(sessionId)
+async function toRequirementTraceMessagesFromSession(
+  sessionId: string,
+  sdkType?: AgentSdkType
+): Promise<TaskAgentTraceMessage[]> {
+  const list = await getAgentSessionMessages({ sessionId, sdkType: sdkType ?? undefined })
   return parseTaskTraceMessagesFromSessionList(list)
 }
 
@@ -33,12 +37,13 @@ export async function getRequirementStageRunTrace(stageRunId: number): Promise<R
   }
 
   const snapshotMessages = toRequirementTraceMessagesFromSnapshot(stageRun.agentProcess)
+  const sessionSdkType = detectAgentSdkTypeFromConversations(parseAgentConversations(stageRun.agentProcess)) ?? undefined
   const sessionId = stageRun.agentSessionId?.trim()
   let messages = snapshotMessages
 
   if (sessionId) {
     try {
-      const sessionMessages = await toRequirementTraceMessagesFromSession(sessionId)
+      const sessionMessages = await toRequirementTraceMessagesFromSession(sessionId, sessionSdkType)
       if (sessionMessages.length > 0) {
         messages = sessionMessages
       }

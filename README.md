@@ -103,7 +103,9 @@ Project metadata, requirement/task states, and stage runs are stored in local SQ
 - Node.js 20+ (recommended)
 - npm 10+
 - A machine with desktop GUI support (for Electron)
-- Claude Agent SDK runtime credentials configured in your local environment
+- Runtime credentials configured for at least one supported Agent SDK:
+  - Claude Agent SDK (default)
+  - Codex SDK (Node SDK; reads provider config from `~/.codex/config.toml`, `OPENAI_API_KEY` optional)
 
 ### Run from Source
 
@@ -130,6 +132,7 @@ npm run pack:dmg
 After packaging, installer artifacts are written to `release/`:
 
 - `Senior-<version>-arm64.dmg`
+- `Senior-<version>-arm64.zip`
 - `Senior-<version>-arm64.dmg.blockmap`
 
 ### Homebrew Distribution
@@ -171,9 +174,9 @@ Tip: you can also manually orchestrate specific tasks and reply directly in task
 │                            └───────────────┬─────────────────────┘  │
 │                                            │                        │
 │                            ┌───────────────▼─────────────────────┐  │
-│                            │ Claude Agent SDK                    │  │
-│                            │ - requirement agents                │  │
-│                            │ - task stage agents                 │  │
+│                            │ Agent SDK Strategy Layer            │  │
+│                            │ - Claude Agent SDK (default)        │  │
+│                            │ - Codex SDK                         │  │
 │                            └───────────────┬─────────────────────┘  │
 │                                            │                        │
 │                ┌───────────────────────────▼─────────────────────┐  │

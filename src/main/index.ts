@@ -89,6 +89,9 @@ import {
   type TaskStageRunListResult,
   type TaskStageRunTraceGetReq,
   type TaskStageRunTraceGetResult,
+  type SettingsGetResult,
+  type SettingsUpdateReq,
+  type SettingsUpdateResult,
 } from "../shared/ipc";
 import { getDb } from "./db";
 import {
@@ -126,6 +129,7 @@ import { failAllRunningTaskStageRuns } from "./task-stage-run-repo";
 import { failAllRunningRequirementStageRuns, listRequirementStageRuns } from "./requirement-stage-run-repo";
 import { onRequirementStageRunChanged } from "./requirement-stage-run-events";
 import { onTaskStageTraceChanged } from "./task-stage-trace-events";
+import { getAppSettings, updateAppSettings } from "./settings-repo";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -638,6 +642,61 @@ function createWindow(): void {
 }
 
 function registerIpcHandlers(): void {
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_GET,
+    async (): Promise<SettingsGetResult> => {
+      try {
+        return {
+          ok: true,
+          data: {
+            settings: getAppSettings(),
+          },
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            code: "SETTINGS_GET_ERROR",
+            message: error instanceof Error ? error.message : "读取设置失败",
+          },
+        };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_UPDATE,
+    async (_event, req: SettingsUpdateReq): Promise<SettingsUpdateResult> => {
+      const nextSdk = req?.agentSdkType;
+      if (nextSdk !== "claude" && nextSdk !== "codex") {
+        return {
+          ok: false,
+          error: {
+            code: "INVALID_INPUT",
+            message: "agentSdkType 非法",
+          },
+        };
+      }
+
+      try {
+        return {
+          ok: true,
+          data: {
+            settings: updateAppSettings({ agentSdkType: nextSdk }),
+          },
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            code: "SETTINGS_UPDATE_ERROR",
+            message: error instanceof Error ? error.message : "更新设置失败",
+          },
+        };
+      }
+    },
+  );
+
   ipcMain.handle(
     IPC_CHANNELS.DIALOG_SELECT_DIRECTORY,
     async (event): Promise<string | null> => {

@@ -17,6 +17,12 @@ export interface Project {
   path: string
 }
 
+export type AgentSdkType = 'claude' | 'codex'
+
+export interface AppSettings {
+  agentSdkType: AgentSdkType
+}
+
 export type RequirementStatus = 'pending' | 'evaluating' | 'prd_designing' | 'prd_reviewing' | 'queued' | 'canceled'
 
 export type RequirementTransitionAction =

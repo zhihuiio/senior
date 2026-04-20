@@ -9,6 +9,25 @@ interface TableInfoRow {
 
 let db: Database.Database | null = null
 
+function ensureAppSettingsTable(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `)
+
+  const now = Date.now()
+  database
+    .prepare(
+      `INSERT INTO app_settings (key, value, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(key) DO NOTHING`
+    )
+    .run('agent_sdk_type', 'claude', now)
+}
+
 function ensureProjectsStatusColumn(database: Database.Database): void {
   const columns = database.prepare("PRAGMA table_info(projects)").all() as TableInfoRow[]
   const hasStatus = columns.some((column) => column.name === 'status')
@@ -379,6 +398,7 @@ export function getDb(): Database.Database {
   `)
 
   ensureProjectsStatusColumn(db)
+  ensureAppSettingsTable(db)
 
   ensureRequirementsTable(db)
   ensureTasksTable(db)

@@ -1,4 +1,5 @@
-import { query } from '@anthropic-ai/claude-agent-sdk'
+import type { AgentSdkType } from '../../shared/types'
+import { getAgentSdkStrategy } from './agent-sdk-registry'
 
 export interface AgentRunnerProgress {
   conversations: unknown[]
@@ -32,94 +33,61 @@ export class AgentRunnerError extends Error {
   }
 }
 
-function readSessionId(message: unknown): string | null {
-  if (!message || typeof message !== 'object') {
-    return null
-  }
+export function detectAgentSdkTypeFromConversations(conversations: unknown[]): AgentSdkType | null {
+  for (const item of conversations) {
+    if (!item || typeof item !== 'object') {
+      continue
+    }
 
-  const record = message as Record<string, unknown>
-  const snake = typeof record.session_id === 'string' ? record.session_id.trim() : ''
-  if (snake) {
-    return snake
-  }
-
-  const camel = typeof record.sessionId === 'string' ? record.sessionId.trim() : ''
-  if (camel) {
-    return camel
+    const record = item as Record<string, unknown>
+    const sourceSdk = typeof record.sourceSdk === 'string' ? record.sourceSdk.trim() : ''
+    if (sourceSdk === 'claude' || sourceSdk === 'codex') {
+      return sourceSdk
+    }
   }
 
   return null
 }
 
-function readResultErrors(message: Record<string, unknown>): string[] {
-  if (!Array.isArray(message.errors)) {
-    return []
-  }
-
-  return message.errors.filter((item): item is string => typeof item === 'string')
+export async function getAgentSessionMessages(input: { sessionId: string; sdkType?: AgentSdkType }): Promise<unknown[]> {
+  const strategy = getAgentSdkStrategy(input.sdkType)
+  const list = await strategy.getSessionMessages(input.sessionId)
+  return list as unknown[]
 }
 
 export async function runAgentQuery(input: RunAgentQueryInput): Promise<AgentRunnerResult> {
-  const stream = query({
-    prompt: input.prompt,
-    options: {
-      cwd: input.cwd ?? process.cwd(),
-      settingSources: ['user', 'project'],
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
-      ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : {}),
-      ...(input.resumeSessionId ? { resume: input.resumeSessionId } : {})
-    }
-  })
-
-  const conversations: unknown[] = []
-  let sessionId: string | null = input.resumeSessionId ?? null
+  const strategy = getAgentSdkStrategy()
 
   try {
-    for await (const message of stream) {
-      conversations.push(message)
-
-      const latestSessionId = readSessionId(message)
-      if (latestSessionId) {
-        sessionId = latestSessionId
+    const result = await strategy.runQuery({
+      prompt: input.prompt,
+      systemPrompt: input.systemPrompt,
+      resumeSessionId: input.resumeSessionId,
+      cwd: input.cwd,
+      errorMessage: input.errorMessage,
+      noResultMessage: input.noResultMessage,
+      onProgress: (progress) => {
+        input.onProgress?.({
+          conversations: progress.conversations as unknown[],
+          sessionId: progress.sessionId,
+          message: progress.message
+        })
       }
+    })
 
-      input.onProgress?.({
-        conversations,
-        sessionId,
-        message
-      })
-
-      if (!message || typeof message !== 'object') {
-        continue
-      }
-
-      const record = message as Record<string, unknown>
-      if (record.type !== 'result') {
-        continue
-      }
-
-      const subtype = typeof record.subtype === 'string' ? record.subtype : ''
-      if (subtype === 'success') {
-        return {
-          resultText: typeof record.result === 'string' ? record.result : '',
-          conversations,
-          sessionId
-        }
-      }
-
-      const errors = readResultErrors(record)
-      throw new AgentRunnerError(errors.join('\n') || input.errorMessage, conversations, sessionId)
+    return {
+      resultText: result.resultText,
+      conversations: result.conversations as unknown[],
+      sessionId: result.sessionId
     }
-
-    throw new AgentRunnerError(input.noResultMessage, conversations, sessionId)
   } catch (error) {
     if (error instanceof AgentRunnerError) {
       throw error
     }
-
-    throw new AgentRunnerError(error instanceof Error ? error.message : input.errorMessage, conversations, sessionId)
-  } finally {
-    stream.close()
+    throw new AgentRunnerError(
+      error instanceof Error ? error.message : input.errorMessage,
+      [],
+      input.resumeSessionId ?? null
+    )
   }
 }
