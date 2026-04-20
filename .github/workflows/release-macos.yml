@@ -1,0 +1,47 @@
+name: release-macos
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and package DMG
+        run: npm run pack:mac
+
+      - name: Generate checksums
+        run: |
+          shasum -a 256 release/*.dmg > release/checksums.txt
+          if ls release/*.zip 1> /dev/null 2>&1; then
+            shasum -a 256 release/*.zip >> release/checksums.txt
+          fi
+
+      - name: Generate Homebrew cask
+        run: npm run homebrew:cask
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.dmg
+            release/*.zip
+            release/checksums.txt
+            release/homebrew/senior.rb

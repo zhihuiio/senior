@@ -75,9 +75,15 @@ export function parseConversationMessages(conversations: unknown[]): Requirement
     if (!isRecord(item)) {
       continue
     }
+    const sourceSdk = typeof item.sourceSdk === 'string' ? item.sourceSdk.trim() : ''
+    const rawPayload = item.payload
+    const normalizedItem = sourceSdk && rawPayload !== undefined ? rawPayload : item
+    if (!isRecord(normalizedItem)) {
+      continue
+    }
 
-    if (item.type === 'assistant' || item.type === 'user') {
-      const message = isRecord(item.message) ? item.message : null
+    if (normalizedItem.type === 'assistant' || normalizedItem.type === 'user') {
+      const message = isRecord(normalizedItem.message) ? normalizedItem.message : null
       const content = extractMessageContent(message?.content)
       if (!content) {
         continue
@@ -85,16 +91,16 @@ export function parseConversationMessages(conversations: unknown[]): Requirement
 
       messages.push({
         id: `msg-${i}`,
-        role: item.type === 'assistant' ? 'assistant' : 'user',
+        role: normalizedItem.type === 'assistant' ? 'assistant' : 'user',
         content
       })
       continue
     }
 
-    if (item.type === 'result') {
-      const subtype = typeof item.subtype === 'string' ? item.subtype : ''
-      const result = typeof item.result === 'string' ? item.result.trim() : ''
-      const errors = Array.isArray(item.errors) ? item.errors.filter((value): value is string => typeof value === 'string') : []
+    if (normalizedItem.type === 'result') {
+      const subtype = typeof normalizedItem.subtype === 'string' ? normalizedItem.subtype : ''
+      const result = typeof normalizedItem.result === 'string' ? normalizedItem.result.trim() : ''
+      const errors = Array.isArray(normalizedItem.errors) ? normalizedItem.errors.filter((value): value is string => typeof value === 'string') : []
 
       if (subtype === 'success' && result) {
         messages.push({
@@ -120,7 +126,53 @@ export function parseConversationMessages(conversations: unknown[]): Requirement
 
 export function parseRequirementMessagesFromSessionList(list: unknown[]): RequirementConversationMessage[] {
   const normalized = list.map((item, index) => {
-    const record = item as unknown as Record<string, unknown>
+    const wrapped = item as unknown as Record<string, unknown>
+    const sourceSdk = typeof wrapped.sourceSdk === 'string' ? wrapped.sourceSdk.trim() : ''
+    const record = (sourceSdk && wrapped.payload && typeof wrapped.payload === 'object'
+      ? wrapped.payload
+      : wrapped) as Record<string, unknown>
+    if (sourceSdk === 'codex') {
+      const type = typeof record.type === 'string' ? record.type : ''
+      if (type === 'response') {
+        const response = isRecord(record.response) ? record.response : null
+        const responseId = typeof response?.id === 'string' ? response.id : `codex-response-${index}`
+        const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+        if (outputText) {
+          return {
+            id: responseId,
+            role: 'assistant',
+            content: outputText
+          } as RequirementConversationMessage
+        }
+
+        const content = extractMessageContent(response?.output)
+        return {
+          id: responseId,
+          role: 'assistant',
+          content
+        } as RequirementConversationMessage
+      }
+      if (type === 'input_items') {
+        const data = isRecord(record.data) ? record.data : null
+        const inputItems = Array.isArray(data?.data) ? data.data : []
+        const merged = inputItems
+          .map((inputItem) => {
+            if (!isRecord(inputItem)) {
+              return ''
+            }
+            return extractMessageContent(inputItem.content)
+          })
+          .filter(Boolean)
+          .join('\n')
+          .trim()
+        return {
+          id: `codex-input-items-${index}`,
+          role: 'user',
+          content: merged
+        } as RequirementConversationMessage
+      }
+    }
+
     const type = typeof record.type === 'string' ? record.type : ''
     const id = typeof record.uuid === 'string' && record.uuid ? record.uuid : `session-msg-${index}`
     const messageRecord = isRecord(record.message) ? record.message : null
@@ -167,7 +219,67 @@ export function parseTaskTraceMessagesFromSessionList(list: unknown[]): TaskAgen
 
   for (let index = 0; index < list.length; index += 1) {
     const item = list[index]
-    const record = item as unknown as Record<string, unknown>
+    const wrapped = item as unknown as Record<string, unknown>
+    const sourceSdk = typeof wrapped.sourceSdk === 'string' ? wrapped.sourceSdk.trim() : ''
+    const record = (sourceSdk && wrapped.payload && typeof wrapped.payload === 'object'
+      ? wrapped.payload
+      : wrapped) as Record<string, unknown>
+    if (sourceSdk === 'codex') {
+      const type = typeof record.type === 'string' ? record.type : ''
+      if (type === 'response') {
+        const response = isRecord(record.response) ? record.response : null
+        const responseId = typeof response?.id === 'string' ? response.id : `codex-response-${index}`
+        const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+        if (outputText) {
+          normalized.push({
+            id: responseId,
+            role: 'assistant',
+            messageType: 'text',
+            content: outputText
+          })
+          continue
+        }
+        const outputTextFallback = extractMessageContent(response?.output)
+        if (outputTextFallback) {
+          normalized.push({
+            id: responseId,
+            role: 'assistant',
+            messageType: 'text',
+            content: outputTextFallback
+          })
+          continue
+        }
+      }
+
+      if (type === 'input_items') {
+        const data = isRecord(record.data) ? record.data : null
+        const inputItems = Array.isArray(data?.data) ? data.data : []
+        for (let inputIndex = 0; inputIndex < inputItems.length; inputIndex += 1) {
+          const inputItem = inputItems[inputIndex]
+          if (!isRecord(inputItem)) {
+            continue
+          }
+          const content = extractMessageContent(inputItem.content) || JSON.stringify(inputItem)
+          if (!content.trim()) {
+            continue
+          }
+          const role =
+            inputItem.role === 'assistant'
+              ? 'assistant'
+              : inputItem.role === 'user'
+                ? 'user'
+                : 'system'
+          normalized.push({
+            id: `codex-input-${index}-${inputIndex}`,
+            role,
+            messageType: 'text',
+            content
+          })
+        }
+        continue
+      }
+    }
+
     const type = typeof record.type === 'string' ? record.type : ''
     const id = typeof record.uuid === 'string' && record.uuid ? record.uuid : `session-msg-${index}`
     const messageRecord = isRecord(record.message) ? record.message : null
@@ -321,10 +433,21 @@ export function parseTaskTraceMessages(conversations: unknown[]): TaskAgentTrace
     if (!isRecord(item)) {
       continue
     }
+    const sourceSdk = typeof item.sourceSdk === 'string' ? item.sourceSdk.trim() : ''
+    const normalizedItem = sourceSdk && item.payload !== undefined ? item.payload : item
+    if (!isRecord(normalizedItem)) {
+      continue
+    }
 
-    const type = typeof item.type === 'string' ? item.type : ''
+    if (sourceSdk === 'codex') {
+      const codexMessages = parseTaskTraceMessagesFromSessionList([item])
+      messages.push(...codexMessages)
+      continue
+    }
+
+    const type = typeof normalizedItem.type === 'string' ? normalizedItem.type : ''
     if (type === 'assistant' || type === 'user') {
-      const message = isRecord(item.message) ? item.message : null
+      const message = isRecord(normalizedItem.message) ? normalizedItem.message : null
       const content = extractMessageContent(message?.content)
       if (!content) {
         continue
@@ -338,8 +461,8 @@ export function parseTaskTraceMessages(conversations: unknown[]): TaskAgentTrace
     }
 
     if (type === 'tool_use') {
-      const name = typeof item.name === 'string' ? item.name.trim() : 'tool'
-      const input = item.input
+      const name = typeof normalizedItem.name === 'string' ? normalizedItem.name.trim() : 'tool'
+      const input = normalizedItem.input
       const inputText =
         input === undefined ? '' : typeof input === 'string' ? input : JSON.stringify(input, null, 2)
       const content = inputText ? `[${name}] ${inputText}` : `[${name}]`
@@ -352,8 +475,8 @@ export function parseTaskTraceMessages(conversations: unknown[]): TaskAgentTrace
     }
 
     if (type === 'tool_result') {
-      const isError = item.is_error === true
-      const result = item.result
+      const isError = normalizedItem.is_error === true
+      const result = normalizedItem.result
       const contentText =
         result === undefined ? '' : typeof result === 'string' ? result : JSON.stringify(result, null, 2)
       const content = isError ? `工具执行失败: ${contentText || '(空返回)'}` : contentText || '(空返回)'
@@ -366,9 +489,9 @@ export function parseTaskTraceMessages(conversations: unknown[]): TaskAgentTrace
     }
 
     if (type === 'result') {
-      const subtype = typeof item.subtype === 'string' ? item.subtype : ''
-      const result = typeof item.result === 'string' ? item.result.trim() : ''
-      const errors = Array.isArray(item.errors) ? item.errors.filter((value): value is string => typeof value === 'string') : []
+      const subtype = typeof normalizedItem.subtype === 'string' ? normalizedItem.subtype : ''
+      const result = typeof normalizedItem.result === 'string' ? normalizedItem.result.trim() : ''
+      const errors = Array.isArray(normalizedItem.errors) ? normalizedItem.errors.filter((value): value is string => typeof value === 'string') : []
       if (subtype === 'success' && result) {
         messages.push({
           id: `result-${i}`,

@@ -32,19 +32,57 @@
   ],
   "type": "module",
   "main": "out/main/index.js",
+  "build": {
+    "appId": "io.zhihui.senior",
+    "productName": "Senior",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/build/Release/*.node"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "zhihuiio",
+        "repo": "senior"
+      }
+    ]
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "pack:mac": "npm run build && electron-builder --mac --publish never",
+    "pack:dmg": "npm run build && electron-builder --mac dmg --publish never",
+    "release:mac": "npm run build && electron-builder --mac --publish always",
+    "homebrew:cask": "node scripts/generate-homebrew-cask.mjs",
     "preview": "electron-vite preview",
     "test:freeform-agent": "node --test tests/main/agents/freeform-agent.test.cjs",
     "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.92",
+    "openai": "^6.9.0",
     "better-sqlite3": "^12.8.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "electron": "^41.1.1",
     "lucide-react": "^1.7.0",
     "pngjs": "^7.0.0",
     "react": "^19.2.4",
@@ -59,7 +97,9 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.0",
     "autoprefixer": "^10.4.27",
+    "electron": "^41.1.1",
     "electron-rebuild": "^3.2.9",
+    "electron-builder": "^26.0.12",
     "electron-vite": "^5.0.0",
     "postcss": "^8.5.8",
     "tailwindcss": "^3.4.19",

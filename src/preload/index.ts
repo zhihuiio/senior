@@ -64,6 +64,9 @@ import type {
   TaskStageRunListResult,
   TaskStageRunTraceGetReq,
   TaskStageRunTraceGetResult,
+  SettingsGetResult,
+  SettingsUpdateReq,
+  SettingsUpdateResult,
   RequirementStatusChangedEvent,
   TaskStatusChangedEvent,
   TaskStageTraceChangedEvent
@@ -106,6 +109,8 @@ export interface RendererApi {
   readRequirementArtifact(req: RequirementArtifactReadReq): Promise<RequirementArtifactReadResult>
   listTaskStageRuns(req: TaskStageRunListReq): Promise<TaskStageRunListResult>
   getTaskStageRunTrace(req: TaskStageRunTraceGetReq): Promise<TaskStageRunTraceGetResult>
+  getSettings(): Promise<SettingsGetResult>
+  updateSettings(req: SettingsUpdateReq): Promise<SettingsUpdateResult>
   onRequirementStatusChanged(
     listener: (event: RequirementStatusChangedEvent) => void
   ): () => void
@@ -225,6 +230,12 @@ const api: RendererApi = {
   },
   getTaskStageRunTrace(req) {
     return ipcRenderer.invoke(IPC_CHANNELS.TASK_STAGE_RUN_TRACE_GET, req)
+  },
+  getSettings() {
+    return ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET)
+  },
+  updateSettings(req) {
+    return ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE, req)
   },
   onRequirementStatusChanged(listener) {
     const wrapped = (

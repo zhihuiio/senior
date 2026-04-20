@@ -42,6 +42,7 @@ import {
 import { getTaskStageRunTrace, listTaskArtifacts, listTaskStageRuns, readTaskArtifact } from './services/task-service'
 import type { RequirementArtifactFile, TaskArtifactFile } from '../shared/ipc'
 import type {
+  AgentSdkType,
   Requirement,
   RequirementConversationMessage,
   RequirementStageRun,
@@ -51,6 +52,7 @@ import type {
   TaskStatus,
   TaskStageRun
 } from '../shared/types'
+import { getAppSettings, updateAppSettings } from './services/settings-service'
 
 const STATUS_TABS: RequirementStatusFilter[] = ['pending', 'processing', 'queued', 'canceled']
 const TASK_STATUS_OPTIONS: TaskStatusFilter[] = ['idle', 'running', 'waiting_human', 'done']
@@ -1292,6 +1294,9 @@ function Workspace({
   const [requirementDurationNowMs, setRequirementDurationNowMs] = useState(() => Date.now())
   const [runnerDurationNowMs, setRunnerDurationNowMs] = useState(() => Date.now())
   const [activeMainTab, setActiveMainTab] = useState<'collector' | 'workspace' | 'overview' | 'settings'>('workspace')
+  const [agentSdkType, setAgentSdkType] = useState<AgentSdkType>('claude')
+  const [agentSdkLoading, setAgentSdkLoading] = useState(false)
+  const [agentSdkError, setAgentSdkError] = useState('')
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null)
   const [projectContextMenu, setProjectContextMenu] = useState<{ projectPath: string; x: number; y: number } | null>(null)
   const [taskArtifactsByTaskId, setTaskArtifactsByTaskId] = useState<Record<number, TaskArtifactFile[]>>({})
@@ -1350,6 +1355,51 @@ function Workspace({
   const [requirementHumanConversationLoading, setRequirementHumanConversationLoading] = useState(false)
   const [requirementHumanConversationError, setRequirementHumanConversationError] = useState('')
   const [requirementHumanAwaitingAssistant, setRequirementHumanAwaitingAssistant] = useState<{ requirementId: number; baselineAssistantCount: number } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setAgentSdkLoading(true)
+    setAgentSdkError('')
+    void getAppSettings()
+      .then((settings) => {
+        if (cancelled) {
+          return
+        }
+        setAgentSdkType(settings.agentSdkType)
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return
+        }
+        setAgentSdkError(error instanceof Error ? error.message : t('读取 Agent SDK 设置失败', 'Failed to load agent SDK settings'))
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAgentSdkLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [t])
+
+  const handleAgentSdkChange = useCallback(async (value: string) => {
+    if (value !== 'claude' && value !== 'codex') {
+      return
+    }
+    const nextValue = value as AgentSdkType
+    setAgentSdkLoading(true)
+    setAgentSdkError('')
+    try {
+      const updated = await updateAppSettings({ agentSdkType: nextValue })
+      setAgentSdkType(updated.agentSdkType)
+    } catch (error) {
+      setAgentSdkError(error instanceof Error ? error.message : t('更新 Agent SDK 设置失败', 'Failed to update agent SDK settings'))
+    } finally {
+      setAgentSdkLoading(false)
+    }
+  }, [t])
 
   const refreshTaskTimelineData = useCallback(async (taskId: number) => {
     const [files, stageRuns] = await Promise.all([listTaskArtifacts(taskId), listTaskStageRuns({ taskId })])
@@ -4543,6 +4593,37 @@ function Workspace({
                     </div>
                     <p className="text-xs leading-5 text-slate-500">
                       {t('语言设置会保存在本地，下次打开应用自动生效。', 'Language preference is stored locally and applied automatically next time.')}
+                    </p>
+                  </div>
+                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50 via-white to-slate-50/70 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+                    <p className="text-xs font-medium tracking-wide text-slate-600">{t('Agent SDK', 'Agent SDK')}</p>
+                    <div className="max-w-sm space-y-2">
+                      <div className="relative">
+                        <Select
+                          value={agentSdkType}
+                          disabled={agentSdkLoading}
+                          onValueChange={(value) => {
+                            void handleAgentSdkChange(value)
+                          }}
+                          className="h-11 w-full appearance-none rounded-lg border-slate-300 bg-white pr-10 text-sm text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-all hover:border-slate-400 focus-visible:ring-sky-500 focus-visible:ring-offset-0 disabled:opacity-60"
+                        >
+                          <SelectItem value="claude">Claude Agent SDK</SelectItem>
+                          <SelectItem value="codex">Codex SDK</SelectItem>
+                        </Select>
+                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        {agentSdkType === 'claude'
+                          ? t('当前选择：Claude Agent SDK', 'Current: Claude Agent SDK')
+                          : t('当前选择：Codex SDK', 'Current: Codex SDK')}
+                      </p>
+                      {agentSdkError ? <p className="text-[11px] text-red-600">{agentSdkError}</p> : null}
+                    </div>
+                    <p className="text-xs leading-5 text-slate-500">
+                      {t(
+                        '切换后仅对下一次新任务/新会话生效，不会中断当前运行；Codex 配置异常时会直接报错提示。',
+                        'Changes apply to the next new task/session only and do not interrupt running flows; Codex failures are reported explicitly.'
+                      )}
                     </p>
                   </div>
                 </div>

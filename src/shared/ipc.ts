@@ -1,4 +1,5 @@
 import type {
+  AppSettings,
   Project,
   Requirement,
   RequirementConversationMessage,
@@ -53,7 +54,9 @@ export const IPC_CHANNELS = {
   REQUIREMENT_STAGE_RUN_TRACE_GET: 'requirement:stageRun:traceGet',
   TASK_STAGE_RUN_LIST: 'task:stageRun:list',
   TASK_STAGE_RUN_TRACE_GET: 'task:stageRun:traceGet',
-  REQUIREMENT_STAGE_RUN_LIST: 'requirement:stageRun:list'
+  REQUIREMENT_STAGE_RUN_LIST: 'requirement:stageRun:list',
+  SETTINGS_GET: 'settings:get',
+  SETTINGS_UPDATE: 'settings:update'
 } as const
 
 export interface AgentAskReq {
@@ -809,3 +812,41 @@ export interface TaskStageRunTraceGetErr {
 }
 
 export type TaskStageRunTraceGetResult = TaskStageRunTraceGetOk | TaskStageRunTraceGetErr
+
+export interface SettingsGetOk {
+  ok: true
+  data: {
+    settings: AppSettings
+  }
+}
+
+export interface SettingsGetErr {
+  ok: false
+  error: {
+    code: string
+    message: string
+  }
+}
+
+export type SettingsGetResult = SettingsGetOk | SettingsGetErr
+
+export interface SettingsUpdateReq {
+  agentSdkType: AppSettings['agentSdkType']
+}
+
+export interface SettingsUpdateOk {
+  ok: true
+  data: {
+    settings: AppSettings
+  }
+}
+
+export interface SettingsUpdateErr {
+  ok: false
+  error: {
+    code: string
+    message: string
+  }
+}
+
+export type SettingsUpdateResult = SettingsUpdateOk | SettingsUpdateErr

@@ -1,5 +1,5 @@
-import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import type { Requirement, RequirementConversationMessage } from '../../shared/types'
+import type { AgentSdkType } from '../../shared/types'
 import { getRequirementById, updateRequirementSessionIdIfEmpty } from '../requirement-repo'
 import { applyRequirementAction, updateRequirementDetail } from '../requirement-service'
 import { createTask, getTasksByRequirement } from '../task-service'
@@ -21,6 +21,7 @@ import {
   stringifyAgentConversations
 } from '../agent-message-utils'
 import { readRequirementArtifactIfExists, resolveRequirementArtifactDir, writeRequirementArtifact } from '../requirement-artifact-service'
+import { detectAgentSdkTypeFromConversations, getAgentSessionMessages } from './agent-runner'
 import {
   finishRequirementStageRun,
   hasOpenRequirementStageRun,
@@ -256,8 +257,11 @@ function buildRequirementEvaluationInput(requirement: Requirement): { requiremen
   }
 }
 
-async function toRequirementMessagesFromSession(sessionId: string): Promise<RequirementConversationMessage[]> {
-  const list = await getSessionMessages(sessionId)
+async function toRequirementMessagesFromSession(
+  sessionId: string,
+  sdkType?: AgentSdkType
+): Promise<RequirementConversationMessage[]> {
+  const list = await getAgentSessionMessages({ sessionId, sdkType: sdkType ?? undefined })
   return parseRequirementMessagesFromSessionList(list)
 }
 
@@ -266,10 +270,11 @@ async function getRequirementConversationMessages(requirement: Requirement): Pro
     return messages.filter((item) => item.role === 'user' || item.role === 'assistant')
   }
   const fallbackMessages = hideSystemMessages(parseConversationMessages(parseAgentConversations(requirement.agentProcess)))
+  const sessionSdkType = detectAgentSdkTypeFromConversations(parseAgentConversations(requirement.agentProcess)) ?? undefined
 
   if (requirement.agentSessionId) {
     try {
-      const messages = await toRequirementMessagesFromSession(requirement.agentSessionId)
+      const messages = await toRequirementMessagesFromSession(requirement.agentSessionId, sessionSdkType)
       if (messages.length > 0) {
         return appendMissingRequirementUserMessages(hideSystemMessages(messages), fallbackMessages)
       }
@@ -292,7 +297,13 @@ async function getRequirementConversationMessagesBySessionId(
   }
 
   try {
-    const messages = await toRequirementMessagesFromSession(normalizedSessionId)
+    const sdkType = detectAgentSdkTypeFromConversations(parseAgentConversations(requirement.agentProcess)) ?? undefined
+    const messages = parseRequirementMessagesFromSessionList(
+      await getAgentSessionMessages({
+        sessionId: normalizedSessionId,
+        sdkType
+      })
+    )
     if (messages.length > 0) {
       return appendMissingRequirementUserMessages(messages.filter((item) => item.role === 'user' || item.role === 'assistant'), fallbackMessages)
     }
