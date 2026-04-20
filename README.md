@@ -133,6 +133,7 @@ After packaging, installer artifacts are written to `release/`:
 
 - `Senior-<version>-arm64.dmg`
 - `Senior-<version>-arm64.zip`
+- `Senior-<version>-arm64.dmg.blockmap`
 
 ### Homebrew Distribution
 
@@ -263,7 +264,7 @@ resources/
 ```bash
 npm run dev                  # Start Electron + Vite in development
 npm run build                # Build main/preload/renderer bundles
-npm run pack:dmg             # Build and package macOS DMG + ZIP artifacts
+npm run pack:dmg             # Build and package macOS DMG artifacts
 npm run pack:mac             # Build and package all configured macOS targets
 npm run release:mac          # Build and publish macOS release artifacts
 npm run homebrew:cask        # Generate Homebrew cask file from packaged DMG

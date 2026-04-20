@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import process from "node:process";
 
@@ -60,7 +60,7 @@ function main() {
 end
 `;
 
-  mkdirSync(join("release", "homebrew"), { recursive: true });
+  mkdirSync(dirname(resolvedOutPath), { recursive: true });
   writeFileSync(resolvedOutPath, cask, "utf8");
   process.stdout.write(`Generated ${resolvedOutPath}\n`);
 }

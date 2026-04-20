@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and package DMG
+      - name: Build and package macOS artifacts
         run: npm run pack:mac
 
       - name: Generate checksums
