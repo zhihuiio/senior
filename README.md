@@ -121,6 +121,28 @@ npm run build
 npm run preview
 ```
 
+### Package macOS DMG
+
+```bash
+npm run pack:dmg
+```
+
+After packaging, installer artifacts are written to `release/`:
+
+- `Senior-<version>-arm64.dmg`
+- `Senior-<version>-arm64.dmg.blockmap`
+
+### Homebrew Distribution
+
+Generate a Homebrew cask file from the packaged DMG:
+
+```bash
+npm run homebrew:cask
+```
+
+This command creates `release/homebrew/senior.rb` with the correct `sha256` and release URL template.
+Publish this file to your Homebrew tap repository (for example `homebrew-tap/Casks/senior.rb`) after uploading release assets.
+
 ---
 
 ## Quick Start
@@ -239,6 +261,10 @@ resources/
 ```bash
 npm run dev                  # Start Electron + Vite in development
 npm run build                # Build main/preload/renderer bundles
+npm run pack:dmg             # Build and package macOS DMG artifacts
+npm run pack:mac             # Build and package all configured macOS targets
+npm run release:mac          # Build and publish macOS release artifacts
+npm run homebrew:cask        # Generate Homebrew cask file from packaged DMG
 npm run preview              # Preview built app
 npm run test:freeform-agent  # Run freeform agent tests
 ```
@@ -269,8 +295,8 @@ Senior stores stage run status (`running/succeeded/failed/waiting_human`), round
 - [x] Requirement and task auto processors
 - [x] Stage run trace persistence and timeline visualization
 - [x] Artifact reading from workspace task directories
+- [x] Packaged macOS DMG workflow and Homebrew cask generation
 - [ ] Expanded test coverage beyond freeform agent tests
-- [ ] Packaged release workflow and installer artifacts
 - [ ] More UI languages beyond English and Simplified Chinese
 
 ---
