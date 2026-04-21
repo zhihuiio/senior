@@ -2204,7 +2204,7 @@ function Workspace({
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [rowsPerPage, queueKeyword, filteredRequirements])
+  }, [displayedRows, rowsPerPage])
 
   useEffect(() => {
     if (currentPage > totalPages) {
