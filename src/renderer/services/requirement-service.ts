@@ -23,7 +23,8 @@ export interface UpdateRequirementRequest {
 }
 
 export async function createRequirement(req: CreateRequirementRequest): Promise<Requirement> {
-  const res = await window.api.createRequirement(req)
+  const api = getRendererApi()
+  const res = await api.createRequirement(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -33,7 +34,8 @@ export async function createRequirement(req: CreateRequirementRequest): Promise<
 }
 
 export async function listRequirementsByProject(projectId: number): Promise<Requirement[]> {
-  const res = await window.api.listRequirementsByProject({ projectId })
+  const api = getRendererApi()
+  const res = await api.listRequirementsByProject({ projectId })
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -76,8 +78,17 @@ export interface RequirementConversationData {
   messages: RequirementConversationMessage[]
 }
 
+function getRendererApi() {
+  if (!window.api) {
+    throw new Error(pickText('客户端接口不可用，请重启应用', 'Renderer API is unavailable. Please restart the app.'))
+  }
+
+  return window.api
+}
+
 export async function updateRequirementDetail(req: UpdateRequirementRequest): Promise<Requirement> {
-  const res = await window.api.updateRequirement(req)
+  const api = getRendererApi()
+  const res = await api.updateRequirement(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -87,7 +98,8 @@ export async function updateRequirementDetail(req: UpdateRequirementRequest): Pr
 }
 
 export async function applyRequirementAction(req: ApplyRequirementActionRequest): Promise<Requirement> {
-  const res = await window.api.applyRequirementAction(req)
+  const api = getRendererApi()
+  const res = await api.applyRequirementAction(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -97,7 +109,8 @@ export async function applyRequirementAction(req: ApplyRequirementActionRequest)
 }
 
 export async function processRequirement(req: ProcessRequirementRequest): Promise<{ requirement: Requirement; resultType: 'accept' | 'clarify' | 'skip' }> {
-  const res = await window.api.processRequirement(req)
+  const api = getRendererApi()
+  const res = await api.processRequirement(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -118,7 +131,8 @@ export async function getRequirementConversation(
   options?: GetRequirementConversationOptions
 ): Promise<RequirementConversationData> {
   const sessionId = options?.sessionId?.trim()
-  const res = await window.api.getRequirementConversation({
+  const api = getRendererApi()
+  const res = await api.getRequirementConversation({
     requirementId,
     ...(sessionId ? { sessionId } : {})
   })
@@ -131,7 +145,8 @@ export async function getRequirementConversation(
 }
 
 export async function replyRequirementConversation(requirementId: number, message: string): Promise<RequirementConversationData> {
-  const res = await window.api.replyRequirementConversation({ requirementId, message })
+  const api = getRendererApi()
+  const res = await api.replyRequirementConversation({ requirementId, message })
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -141,7 +156,17 @@ export async function replyRequirementConversation(requirementId: number, messag
 }
 
 export async function startRequirementAutoProcessor(): Promise<AutoProcessorStatusData> {
-  const res = await window.api.startRequirementAutoProcessor()
+  const api = getRendererApi()
+  if (typeof api.startRequirementAutoProcessor !== 'function') {
+    throw new Error(
+      pickText(
+        '当前客户端版本不支持需求自动处理启动，请重启应用后重试',
+        'This app version does not support starting requirement auto processor. Please restart and try again.'
+      )
+    )
+  }
+
+  const res = await api.startRequirementAutoProcessor()
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -151,7 +176,17 @@ export async function startRequirementAutoProcessor(): Promise<AutoProcessorStat
 }
 
 export async function stopRequirementAutoProcessor(): Promise<AutoProcessorStatusData> {
-  const res = await window.api.stopRequirementAutoProcessor()
+  const api = getRendererApi()
+  if (typeof api.stopRequirementAutoProcessor !== 'function') {
+    throw new Error(
+      pickText(
+        '当前客户端版本不支持需求自动处理停止，请重启应用后重试',
+        'This app version does not support stopping requirement auto processor. Please restart and try again.'
+      )
+    )
+  }
+
+  const res = await api.stopRequirementAutoProcessor()
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -161,7 +196,17 @@ export async function stopRequirementAutoProcessor(): Promise<AutoProcessorStatu
 }
 
 export async function getRequirementAutoProcessorStatus(): Promise<AutoProcessorStatusData> {
-  const res = await window.api.getRequirementAutoProcessorStatus()
+  const api = getRendererApi()
+  if (typeof api.getRequirementAutoProcessorStatus !== 'function') {
+    throw new Error(
+      pickText(
+        '当前客户端版本不支持需求自动处理状态读取，请重启应用后重试',
+        'This app version does not support requirement auto processor status read. Please restart and try again.'
+      )
+    )
+  }
+
+  const res = await api.getRequirementAutoProcessorStatus()
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -171,7 +216,8 @@ export async function getRequirementAutoProcessorStatus(): Promise<AutoProcessor
 }
 
 export async function listRequirementStageRuns(req: ListRequirementStageRunsRequest): Promise<RequirementStageRun[]> {
-  const res = await window.api.listRequirementStageRuns(req)
+  const api = getRendererApi()
+  const res = await api.listRequirementStageRuns(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -183,7 +229,8 @@ export async function listRequirementStageRuns(req: ListRequirementStageRunsRequ
 export async function getRequirementStageRunTrace(
   req: GetRequirementStageRunTraceRequest
 ): Promise<{ stageRun: RequirementStageRun; messages: TaskAgentTraceMessage[] }> {
-  const res = await window.api.getRequirementStageRunTrace(req)
+  const api = getRendererApi()
+  const res = await api.getRequirementStageRunTrace(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -196,7 +243,8 @@ export async function getRequirementStageRunTrace(
 }
 
 export async function listRequirementArtifacts(req: ListRequirementArtifactsRequest): Promise<RequirementArtifactFile[]> {
-  const res = await window.api.listRequirementArtifacts(req)
+  const api = getRendererApi()
+  const res = await api.listRequirementArtifacts(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -206,7 +254,8 @@ export async function listRequirementArtifacts(req: ListRequirementArtifactsRequ
 }
 
 export async function readRequirementArtifact(req: ReadRequirementArtifactRequest): Promise<string> {
-  const res = await window.api.readRequirementArtifact(req)
+  const api = getRendererApi()
+  const res = await api.readRequirementArtifact(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)

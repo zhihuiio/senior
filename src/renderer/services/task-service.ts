@@ -56,8 +56,17 @@ export interface ReplyTaskHumanConversationRequest {
   message: string
 }
 
+function getRendererApi() {
+  if (!window.api) {
+    throw new Error(pickText('客户端接口不可用，请重启应用', 'Renderer API is unavailable. Please restart the app.'))
+  }
+
+  return window.api
+}
+
 export async function createTask(req: CreateTaskRequest): Promise<Task> {
-  const res = await window.api.createTask(req)
+  const api = getRendererApi()
+  const res = await api.createTask(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -67,7 +76,8 @@ export async function createTask(req: CreateTaskRequest): Promise<Task> {
 }
 
 export async function listTasksByRequirement(requirementId: number): Promise<Task[]> {
-  const res = await window.api.listTasksByRequirement({ requirementId })
+  const api = getRendererApi()
+  const res = await api.listTasksByRequirement({ requirementId })
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -77,7 +87,8 @@ export async function listTasksByRequirement(requirementId: number): Promise<Tas
 }
 
 export async function listTasksByProject(projectId: number): Promise<Task[]> {
-  const res = await window.api.listTasksByProject({ projectId })
+  const api = getRendererApi()
+  const res = await api.listTasksByProject({ projectId })
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -87,7 +98,8 @@ export async function listTasksByProject(projectId: number): Promise<Task[]> {
 }
 
 export async function updateTaskDetail(req: UpdateTaskRequest): Promise<Task> {
-  const res = await window.api.updateTask(req)
+  const api = getRendererApi()
+  const res = await api.updateTask(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -97,7 +109,8 @@ export async function updateTaskDetail(req: UpdateTaskRequest): Promise<Task> {
 }
 
 export async function applyTaskAction(req: ApplyTaskActionRequest): Promise<Task> {
-  const res = await window.api.applyTaskAction(req)
+  const api = getRendererApi()
+  const res = await api.applyTaskAction(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -107,7 +120,8 @@ export async function applyTaskAction(req: ApplyTaskActionRequest): Promise<Task
 }
 
 export async function applyTaskHumanCommand(req: ApplyTaskHumanCommandRequest): Promise<Task> {
-  const res = await window.api.applyTaskHumanCommand(req)
+  const api = getRendererApi()
+  const res = await api.applyTaskHumanCommand(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -119,7 +133,8 @@ export async function applyTaskHumanCommand(req: ApplyTaskHumanCommandRequest): 
 export async function getTaskHumanConversation(
   req: GetTaskHumanConversationRequest
 ): Promise<{ task: Task; waitingContext: TaskWaitingContext; messages: TaskAgentTraceMessage[] }> {
-  const res = await window.api.getTaskHumanConversation(req)
+  const api = getRendererApi()
+  const res = await api.getTaskHumanConversation(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -131,7 +146,8 @@ export async function getTaskHumanConversation(
 export async function replyTaskHumanConversation(
   req: ReplyTaskHumanConversationRequest
 ): Promise<{ task: Task; waitingContext: TaskWaitingContext; messages: TaskAgentTraceMessage[] }> {
-  const res = await window.api.replyTaskHumanConversation(req)
+  const api = getRendererApi()
+  const res = await api.replyTaskHumanConversation(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -141,7 +157,8 @@ export async function replyTaskHumanConversation(
 }
 
 export async function orchestrateTask(taskId: number): Promise<Task> {
-  const res = await window.api.orchestrateTask({ taskId })
+  const api = getRendererApi()
+  const res = await api.orchestrateTask({ taskId })
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -151,7 +168,8 @@ export async function orchestrateTask(taskId: number): Promise<Task> {
 }
 
 export async function listTaskArtifacts(taskId: number): Promise<TaskArtifactFile[]> {
-  const res = await window.api.listTaskArtifacts({ taskId })
+  const api = getRendererApi()
+  const res = await api.listTaskArtifacts({ taskId })
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -161,7 +179,8 @@ export async function listTaskArtifacts(taskId: number): Promise<TaskArtifactFil
 }
 
 export async function readTaskArtifact(req: ReadTaskArtifactRequest): Promise<string> {
-  const res = await window.api.readTaskArtifact(req)
+  const api = getRendererApi()
+  const res = await api.readTaskArtifact(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -171,7 +190,8 @@ export async function readTaskArtifact(req: ReadTaskArtifactRequest): Promise<st
 }
 
 export async function listTaskStageRuns(req: ListTaskStageRunsRequest): Promise<TaskStageRun[]> {
-  const res = await window.api.listTaskStageRuns(req)
+  const api = getRendererApi()
+  const res = await api.listTaskStageRuns(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -181,7 +201,8 @@ export async function listTaskStageRuns(req: ListTaskStageRunsRequest): Promise<
 }
 
 export async function getTaskStageRunTrace(req: GetTaskStageRunTraceRequest): Promise<{ stageRun: TaskStageRun; messages: TaskAgentTraceMessage[] }> {
-  const res = await window.api.getTaskStageRunTrace(req)
+  const api = getRendererApi()
+  const res = await api.getTaskStageRunTrace(req)
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -194,7 +215,17 @@ export async function getTaskStageRunTrace(req: GetTaskStageRunTraceRequest): Pr
 }
 
 export async function startTaskAutoProcessor(): Promise<AutoProcessorStatusData> {
-  const res = await window.api.startTaskAutoProcessor()
+  const api = getRendererApi()
+  if (typeof api.startTaskAutoProcessor !== 'function') {
+    throw new Error(
+      pickText(
+        '当前客户端版本不支持任务自动处理启动，请重启应用后重试',
+        'This app version does not support starting task auto processor. Please restart and try again.'
+      )
+    )
+  }
+
+  const res = await api.startTaskAutoProcessor()
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -204,7 +235,17 @@ export async function startTaskAutoProcessor(): Promise<AutoProcessorStatusData>
 }
 
 export async function stopTaskAutoProcessor(): Promise<AutoProcessorStatusData> {
-  const res = await window.api.stopTaskAutoProcessor()
+  const api = getRendererApi()
+  if (typeof api.stopTaskAutoProcessor !== 'function') {
+    throw new Error(
+      pickText(
+        '当前客户端版本不支持任务自动处理停止，请重启应用后重试',
+        'This app version does not support stopping task auto processor. Please restart and try again.'
+      )
+    )
+  }
+
+  const res = await api.stopTaskAutoProcessor()
 
   if (!res.ok) {
     throw new Error(res.error.message)
@@ -214,7 +255,17 @@ export async function stopTaskAutoProcessor(): Promise<AutoProcessorStatusData> 
 }
 
 export async function getTaskAutoProcessorStatus(): Promise<AutoProcessorStatusData> {
-  const res = await window.api.getTaskAutoProcessorStatus()
+  const api = getRendererApi()
+  if (typeof api.getTaskAutoProcessorStatus !== 'function') {
+    throw new Error(
+      pickText(
+        '当前客户端版本不支持任务自动处理状态读取，请重启应用后重试',
+        'This app version does not support task auto processor status read. Please restart and try again.'
+      )
+    )
+  }
+
+  const res = await api.getTaskAutoProcessorStatus()
 
   if (!res.ok) {
     throw new Error(res.error.message)
