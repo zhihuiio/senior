@@ -1658,6 +1658,7 @@ function Workspace({
       setArtifactModalError('')
       closeTaskStageTraceModal()
       setTaskHumanInput('')
+      setTaskHumanConversationLoading(false)
       setTaskHumanConversationError('')
       setTaskHumanAwaitingAssistant(null)
     }
@@ -1666,6 +1667,7 @@ function Workspace({
   useEffect(() => {
     if (activeListType !== 'requirement') {
       closeRequirementStageTraceModal()
+      setRequirementHumanConversationLoading(false)
       setRequirementHumanAwaitingAssistant(null)
     }
   }, [activeListType])
@@ -2690,6 +2692,7 @@ function Workspace({
       messages: []
     })
     setTaskHumanInput('')
+    setTaskHumanConversationLoading(false)
     setTaskHumanConversationError('')
     setTaskHumanAwaitingAssistant(null)
     setTaskTraceDetailModal({
@@ -2715,6 +2718,7 @@ function Workspace({
     })
     setRequirementHumanAwaitingAssistant(null)
     setRequirementHumanInput('')
+    setRequirementHumanConversationLoading(false)
     setRequirementHumanConversationError('')
     setTaskTraceDetailModal({
       open: false,
