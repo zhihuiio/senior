@@ -206,6 +206,7 @@ export function useProjectState() {
         setTasksByRequirementId,
         setSelectedRequirementId
       })
+      setError('')
     },
     [requirementStatusFilter]
   )
