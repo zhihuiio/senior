@@ -4067,7 +4067,7 @@ function Workspace({
                       <div className="mt-2 space-y-2">
                         <Textarea
                           rows={3}
-                          ref={requirementHumanInputRef}
+                          ref={taskHumanInputRef}
                           value={taskHumanInput}
                           onChange={(event) => setTaskHumanInput(event.target.value)}
                           placeholder={t('输入补充说明，Agent 会在当前执行节点继续修正产物。', 'Enter supplemental instructions. Agent will keep refining artifacts in the current stage.')}
