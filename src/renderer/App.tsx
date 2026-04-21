@@ -1315,9 +1315,11 @@ function Workspace({
   const taskStageTraceMessagesContainerRef = useRef<HTMLDivElement | null>(null)
   const taskHumanInputRef = useRef<HTMLTextAreaElement | null>(null)
   const openingTaskHumanConversationRef = useRef(false)
+  const taskHumanConversationContextVersionRef = useRef(0)
   const requirementStageTraceMessagesContainerRef = useRef<HTMLDivElement | null>(null)
   const requirementHumanInputRef = useRef<HTMLTextAreaElement | null>(null)
   const openingRequirementHumanConversationRef = useRef(false)
+  const requirementHumanConversationContextVersionRef = useRef(0)
   const requirementConversationLoadSeqRef = useRef(0)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const sidebarTransitionEnableRafRef = useRef<number | null>(null)
@@ -1663,6 +1665,11 @@ function Workspace({
       setTaskHumanConversationError('')
       setTaskHumanAwaitingAssistant(null)
     }
+  }, [activeListType])
+
+  useEffect(() => {
+    taskHumanConversationContextVersionRef.current += 1
+    requirementHumanConversationContextVersionRef.current += 1
   }, [activeListType])
 
   useEffect(() => {
@@ -2453,6 +2460,7 @@ function Workspace({
       if (activeListType !== 'task') {
         return
       }
+      const openContextVersion = taskHumanConversationContextVersionRef.current
 
       if (openingTaskHumanConversationRef.current) {
         return
@@ -2513,6 +2521,9 @@ function Workspace({
         if (!waitingCard) {
           return
         }
+        if (taskHumanConversationContextVersionRef.current !== openContextVersion) {
+          return
+        }
 
         const cachedHumanMessages = taskHumanMessagesByTaskId[taskId] ?? []
         const hasCachedHumanMessages = cachedHumanMessages.length > 0
@@ -2551,6 +2562,7 @@ function Workspace({
       if (activeListType !== 'requirement') {
         return
       }
+      const openContextVersion = requirementHumanConversationContextVersionRef.current
 
       if (openingRequirementHumanConversationRef.current) {
         return
@@ -2572,6 +2584,9 @@ function Workspace({
 
           const waitingStageRun = stageRuns.slice().reverse().find((run) => run.resultStatus === 'waiting_human')
           if (!waitingStageRun) {
+            return
+          }
+          if (requirementHumanConversationContextVersionRef.current !== openContextVersion) {
             return
           }
 
