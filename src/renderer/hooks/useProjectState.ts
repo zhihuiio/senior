@@ -108,6 +108,44 @@ function matchesRequirementStatusFilter(status: RequirementStatus, filter: Requi
   return status === 'pending'
 }
 
+function hydrateProjectData(input: {
+  projectId: number
+  requirements: Requirement[]
+  projectTasksRaw: Task[]
+  requirementStatusFilter: RequirementStatusFilter
+  setRequirements: React.Dispatch<React.SetStateAction<Requirement[]>>
+  setTasksByProjectId: React.Dispatch<React.SetStateAction<Record<number, Task[]>>>
+  setTasksByRequirementId: React.Dispatch<React.SetStateAction<Record<number, Task[]>>>
+  setSelectedRequirementId: React.Dispatch<React.SetStateAction<number | null>>
+}) {
+  const projectTasks = normalizeTaskListView(input.projectTasksRaw)
+  input.setRequirements(input.requirements)
+  input.setTasksByProjectId((prev) => ({
+    ...prev,
+    [input.projectId]: projectTasks
+  }))
+  input.setTasksByRequirementId((prev) => {
+    const next: Record<number, Task[]> = {}
+    for (const requirement of input.requirements) {
+      next[requirement.id] = prev[requirement.id] ?? []
+    }
+    return next
+  })
+  input.setSelectedRequirementId((prev) => {
+    if (prev) {
+      const current = input.requirements.find((requirement) => requirement.id === prev)
+      if (current && matchesRequirementStatusFilter(current.status, input.requirementStatusFilter)) {
+        return prev
+      }
+    }
+
+    const first =
+      input.requirements.find((requirement) => matchesRequirementStatusFilter(requirement.status, input.requirementStatusFilter)) ??
+      input.requirements[0]
+    return first ? first.id : null
+  })
+}
+
 export function useProjectState() {
   const [projects, setProjects] = useState<Project[]>([])
   const [requirements, setRequirements] = useState<Requirement[]>([])
@@ -149,29 +187,15 @@ export function useProjectState() {
   const loadRequirements = useCallback(
     async (projectId: number) => {
       const [list, projectTasksRaw] = await Promise.all([listRequirementsByProject(projectId), listTasksByProject(projectId)])
-      const projectTasks = normalizeTaskListView(projectTasksRaw)
-      setRequirements(list)
-      setTasksByProjectId((prev) => ({
-        ...prev,
-        [projectId]: projectTasks
-      }))
-      setTasksByRequirementId((prev) => {
-        const next: Record<number, Task[]> = {}
-        for (const requirement of list) {
-          next[requirement.id] = prev[requirement.id] ?? []
-        }
-        return next
-      })
-      setSelectedRequirementId((prev) => {
-        if (prev) {
-          const current = list.find((requirement) => requirement.id === prev)
-          if (current && matchesRequirementStatusFilter(current.status, requirementStatusFilter)) {
-            return prev
-          }
-        }
-
-        const first = list.find((requirement) => matchesRequirementStatusFilter(requirement.status, requirementStatusFilter)) ?? list[0]
-        return first ? first.id : null
+      hydrateProjectData({
+        projectId,
+        requirements: list,
+        projectTasksRaw,
+        requirementStatusFilter,
+        setRequirements,
+        setTasksByProjectId,
+        setTasksByRequirementId,
+        setSelectedRequirementId
       })
     },
     [requirementStatusFilter]
@@ -329,30 +353,15 @@ export function useProjectState() {
           return
         }
 
-        const projectTasks = normalizeTaskListView(projectTasksRaw)
-
-        setRequirements(list)
-        setTasksByProjectId((prev) => ({
-          ...prev,
-          [selectedProjectId]: projectTasks
-        }))
-        setTasksByRequirementId((prev) => {
-          const next: Record<number, Task[]> = {}
-          for (const requirement of list) {
-            next[requirement.id] = prev[requirement.id] ?? []
-          }
-          return next
-        })
-        setSelectedRequirementId((prev) => {
-          if (prev) {
-            const current = list.find((requirement) => requirement.id === prev)
-            if (current && matchesRequirementStatusFilter(current.status, requirementStatusFilter)) {
-              return prev
-            }
-          }
-
-          const first = list.find((requirement) => matchesRequirementStatusFilter(requirement.status, requirementStatusFilter)) ?? list[0]
-          return first ? first.id : null
+        hydrateProjectData({
+          projectId: selectedProjectId,
+          requirements: list,
+          projectTasksRaw,
+          requirementStatusFilter,
+          setRequirements,
+          setTasksByProjectId,
+          setTasksByRequirementId,
+          setSelectedRequirementId
         })
         setError('')
       } catch (e) {
