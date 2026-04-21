@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   Project,
   Requirement,
@@ -165,6 +165,11 @@ export function useProjectState() {
   const [taskAutoProcessorStartedAt, setTaskAutoProcessorStartedAt] = useState<number | null>(null)
   const [taskAutoProcessorLoading, setTaskAutoProcessorLoading] = useState(false)
   const [clarifyMessagesByRequirementId, setClarifyMessagesByRequirementId] = useState<Record<number, RequirementConversationMessage[]>>({})
+  const selectedProjectIdRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    selectedProjectIdRef.current = selectedProjectId
+  }, [selectedProjectId])
 
   const loadProjects = useCallback(async () => {
     try {
@@ -187,6 +192,10 @@ export function useProjectState() {
   const loadRequirements = useCallback(
     async (projectId: number) => {
       const [list, projectTasksRaw] = await Promise.all([listRequirementsByProject(projectId), listTasksByProject(projectId)])
+      if (selectedProjectIdRef.current !== projectId) {
+        return
+      }
+
       hydrateProjectData({
         projectId,
         requirements: list,
