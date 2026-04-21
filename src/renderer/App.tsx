@@ -4827,6 +4827,8 @@ function Workspace({
                       <Select
                         value={String(rowsPerPage)}
                         onValueChange={(value) => setRowsPerPage(Number(value))}
+                        name="rowsPerPage"
+                        aria-label={t('每页行数', 'Rows per page')}
                         className="h-8 w-[78px] rounded-md border-slate-200 text-xs"
                       >
                         {ROWS_PER_PAGE_OPTIONS.map((size) => (
