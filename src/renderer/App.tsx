@@ -1317,6 +1317,7 @@ function Workspace({
   const openingTaskHumanConversationRef = useRef(false)
   const pendingTaskHumanConversationTaskIdRef = useRef<number | null>(null)
   const taskHumanConversationContextVersionRef = useRef(0)
+  const activeListTypeRef = useRef(activeListType)
   const requirementStageTraceMessagesContainerRef = useRef<HTMLDivElement | null>(null)
   const requirementHumanInputRef = useRef<HTMLTextAreaElement | null>(null)
   const openingRequirementHumanConversationRef = useRef(false)
@@ -1667,6 +1668,10 @@ function Workspace({
       setTaskHumanConversationError('')
       setTaskHumanAwaitingAssistant(null)
     }
+  }, [activeListType])
+
+  useEffect(() => {
+    activeListTypeRef.current = activeListType
   }, [activeListType])
 
   useEffect(() => {
@@ -2459,7 +2464,7 @@ function Workspace({
 
   const openTaskHumanConversation = useCallback(
     async (taskId: number) => {
-      if (activeListType !== 'task') {
+      if (activeListTypeRef.current !== 'task') {
         return
       }
       const openContextVersion = taskHumanConversationContextVersionRef.current
@@ -2568,7 +2573,7 @@ function Workspace({
 
   const openRequirementHumanConversation = useCallback(
     async (requirementId: number) => {
-      if (activeListType !== 'requirement') {
+      if (activeListTypeRef.current !== 'requirement') {
         return
       }
       const openContextVersion = requirementHumanConversationContextVersionRef.current
