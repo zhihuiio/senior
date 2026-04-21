@@ -860,9 +860,16 @@ export function useProjectState() {
     }
   }, [])
 
-  const loadRequirementConversation = useCallback(async (requirementId: number, sessionId?: string) => {
-    setLoading(true)
-    setError('')
+  const loadRequirementConversation = useCallback(async (
+    requirementId: number,
+    sessionId?: string,
+    options?: { background?: boolean }
+  ) => {
+    const shouldManageGlobalLoading = !options?.background
+    if (shouldManageGlobalLoading) {
+      setLoading(true)
+      setError('')
+    }
 
     try {
       const data = await getRequirementConversation(requirementId, { sessionId })
@@ -874,10 +881,14 @@ export function useProjectState() {
       return data
     } catch (e) {
       const message = e instanceof Error ? e.message : pickText('读取会话失败', 'Failed to load conversation')
-      setError(message)
+      if (shouldManageGlobalLoading) {
+        setError(message)
+      }
       throw new Error(message)
     } finally {
-      setLoading(false)
+      if (shouldManageGlobalLoading) {
+        setLoading(false)
+      }
     }
   }, [])
 

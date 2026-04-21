@@ -1563,7 +1563,9 @@ function Workspace({
       }
     }, 180)
 
-    void loadRequirementConversation(clarifyRequirementId, clarifyDialogSessionId)
+    void loadRequirementConversation(clarifyRequirementId, clarifyDialogSessionId, {
+      background: clarifyDialogMode === 'detail'
+    })
       .catch(() => {
         // error is handled in hook state
       })
@@ -1579,7 +1581,7 @@ function Workspace({
       cancelled = true
       window.clearTimeout(loadingDelayTimer)
     }
-  }, [clarifyRequirementId, clarifyDialogSessionId, clarifyDialogRefreshSeq, loadRequirementConversation])
+  }, [clarifyDialogMode, clarifyRequirementId, clarifyDialogSessionId, clarifyDialogRefreshSeq, loadRequirementConversation])
 
   useEffect(() => {
     if (!clarifyRequirementId) {
