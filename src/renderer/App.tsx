@@ -1606,7 +1606,7 @@ function Workspace({
     clarifyRequirementItem?.status === 'prd_designing' ||
     clarifyRequirementItem?.status === 'prd_reviewing'
   const hasClarifySessionId = Boolean(clarifyRequirementItem?.agentSessionId?.trim())
-  const shouldShowSessionLoading = !hasClarifySessionId && clarifyMessages.length === 0
+  const shouldShowSessionLoading = clarifyConversationPending && clarifyLoadingVisible && hasClarifySessionId && clarifyMessages.length === 0
   const shouldShowThinkingIndicator = isClarifyProcessing
   const canSendClarify = !loading && Boolean(clarifyInput.trim()) && clarifyRequirementItem?.waitingContext === 'prd_review_gate'
   const selectedTask = useMemo(() => {
