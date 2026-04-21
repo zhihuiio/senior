@@ -1365,6 +1365,7 @@ function Workspace({
   const [requirementHumanConversationLoading, setRequirementHumanConversationLoading] = useState(false)
   const [requirementHumanConversationError, setRequirementHumanConversationError] = useState('')
   const [requirementHumanAwaitingAssistant, setRequirementHumanAwaitingAssistant] = useState<{ requirementId: number; baselineAssistantCount: number } | null>(null)
+  activeListTypeRef.current = activeListType
 
   useEffect(() => {
     let cancelled = false
@@ -1668,10 +1669,6 @@ function Workspace({
       setTaskHumanConversationError('')
       setTaskHumanAwaitingAssistant(null)
     }
-  }, [activeListType])
-
-  useEffect(() => {
-    activeListTypeRef.current = activeListType
   }, [activeListType])
 
   useEffect(() => {
