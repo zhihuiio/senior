@@ -902,6 +902,13 @@ export function useProjectState() {
         return data
       } catch (e) {
         const messageText = e instanceof Error ? e.message : pickText('澄清需求失败', 'Failed to clarify requirement')
+        setClarifyMessagesByRequirementId((prev) => {
+          const current = prev[requirementId] ?? []
+          return {
+            ...prev,
+            [requirementId]: current.filter((item) => item.id !== optimisticUserMessageId)
+          }
+        })
         setError(messageText)
         throw new Error(messageText)
       } finally {

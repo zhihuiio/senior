@@ -3150,8 +3150,12 @@ function Workspace({
 
     setClarifyInput('')
     scrollClarifyMessagesToBottom()
-    await clarifyRequirement(clarifyRequirementItem.id, message)
-    scrollClarifyMessagesToBottom()
+    try {
+      await clarifyRequirement(clarifyRequirementItem.id, message)
+      scrollClarifyMessagesToBottom()
+    } catch {
+      setClarifyInput(message)
+    }
   }
 
   const onSidebarResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
