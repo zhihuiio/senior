@@ -2527,6 +2527,9 @@ function Workspace({
         if (!waitingCard) {
           return
         }
+        if (activeListTypeRef.current !== 'task') {
+          return
+        }
         if (taskHumanConversationContextVersionRef.current !== openContextVersion) {
           return
         }
@@ -2597,6 +2600,9 @@ function Workspace({
 
           const waitingStageRun = stageRuns.slice().reverse().find((run) => run.resultStatus === 'waiting_human')
           if (!waitingStageRun) {
+            return
+          }
+          if (activeListTypeRef.current !== 'requirement') {
             return
           }
           if (requirementHumanConversationContextVersionRef.current !== openContextVersion) {
