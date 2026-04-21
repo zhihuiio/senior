@@ -2013,12 +2013,6 @@ function Workspace({
   }, [selectedProjectId, requirementStatusFilter, taskStatusFilter])
 
   useEffect(() => {
-    if (activeListType === 'task') {
-      setIsDetailVisible(false)
-    }
-  }, [activeListType])
-
-  useEffect(() => {
     const onResize = () => setViewportWidth(window.innerWidth)
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
