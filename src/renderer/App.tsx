@@ -2816,7 +2816,7 @@ function Workspace({
 
   const openRequirementLatestStageTraceFromList = useCallback(
     async (requirementId: number) => {
-      if (activeListType !== 'requirement') {
+      if (activeListTypeRef.current !== 'requirement') {
         return
       }
 
@@ -2857,7 +2857,7 @@ function Workspace({
         // ignore; fallback to existing timeline state
       }
     },
-    [activeListType, onOpenRequirementStageTraceModal, t]
+    [onOpenRequirementStageTraceModal, t]
   )
 
   const onPreviewTaskArtifact = async (taskId: number, fileName: string) => {
