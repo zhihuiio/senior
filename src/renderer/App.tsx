@@ -1314,6 +1314,7 @@ function Workspace({
   const clarifyMessagesContainerRef = useRef<HTMLDivElement | null>(null)
   const taskStageTraceMessagesContainerRef = useRef<HTMLDivElement | null>(null)
   const taskHumanInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const openingTaskHumanConversationRef = useRef(false)
   const requirementStageTraceMessagesContainerRef = useRef<HTMLDivElement | null>(null)
   const requirementHumanInputRef = useRef<HTMLTextAreaElement | null>(null)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
@@ -2448,84 +2449,94 @@ function Workspace({
         return
       }
 
-      openTaskDetail(taskId)
-      const task = filteredTasks.find((item) => item.id === taskId)
-      const waitingContext = task?.waitingContext ?? null
-      if (!isTaskInWaitingHumanGate(waitingContext)) {
+      if (openingTaskHumanConversationRef.current) {
         return
       }
 
-      const waitingStageKey = waitingContext === 'coding_gate' ? 'coding' : 'arch_designing'
-      let waitingCard = buildTaskFlowCardsByTaskId(taskId)
-        .filter((item) => item.stageKey === waitingStageKey)
-        .slice()
-        .reverse()
-        .find((item) => item.resultStatus === 'waiting_human')
+      openingTaskHumanConversationRef.current = true
 
-      if (!waitingCard) {
-        try {
-          const stageRuns = await listTaskStageRuns({ taskId })
-          setTaskStageRunsByTaskId((prev) => ({
-            ...prev,
-            [taskId]: stageRuns
-          }))
-          const waitingRun = stageRuns
-            .filter((run) => run.stageKey === waitingStageKey && run.resultStatus === 'waiting_human')
-            .slice()
-            .reverse()[0]
-          if (!waitingRun) {
-            return
-          }
-          const stageLabel = getTaskStageLabel(waitingRun.stageKey)
-          const stageTitle =
-            waitingRun.round > 1 ? t(`${stageLabel}（第${waitingRun.round}轮）`, `${stageLabel} (Round ${waitingRun.round})`) : stageLabel
-          waitingCard = {
-            id: `${waitingRun.stageKey}-${waitingRun.round}-${waitingRun.id}`,
-            stageRunId: waitingRun.id,
-            stageKey: waitingRun.stageKey,
-            stageLabel: stageTitle,
-            round: waitingRun.round,
-            startAt: waitingRun.startAt,
-            endAt: waitingRun.endAt,
-            resultStatus: waitingRun.resultStatus,
-            failureReason: waitingRun.failureReason,
-            durationText: formatDurationMs((waitingRun.endAt ?? Date.now()) - waitingRun.startAt),
-            artifactFiles: []
-          }
-        } catch {
+      try {
+        openTaskDetail(taskId)
+        const task = filteredTasks.find((item) => item.id === taskId)
+        const waitingContext = task?.waitingContext ?? null
+        if (!isTaskInWaitingHumanGate(waitingContext)) {
           return
         }
-      }
 
-      if (!waitingCard) {
-        return
-      }
+        const waitingStageKey = waitingContext === 'coding_gate' ? 'coding' : 'arch_designing'
+        let waitingCard = buildTaskFlowCardsByTaskId(taskId)
+          .filter((item) => item.stageKey === waitingStageKey)
+          .slice()
+          .reverse()
+          .find((item) => item.resultStatus === 'waiting_human')
 
-      const cachedHumanMessages = taskHumanMessagesByTaskId[taskId] ?? []
-      const hasCachedHumanMessages = cachedHumanMessages.length > 0
-      if (
-        taskStageTraceModal.open &&
-        taskStageTraceModal.humanMode &&
-        taskStageTraceModal.taskId === taskId &&
-        taskStageTraceModal.stageRunId === waitingCard.stageRunId
-      ) {
+        if (!waitingCard) {
+          try {
+            const stageRuns = await listTaskStageRuns({ taskId })
+            setTaskStageRunsByTaskId((prev) => ({
+              ...prev,
+              [taskId]: stageRuns
+            }))
+            const waitingRun = stageRuns
+              .filter((run) => run.stageKey === waitingStageKey && run.resultStatus === 'waiting_human')
+              .slice()
+              .reverse()[0]
+            if (!waitingRun) {
+              return
+            }
+            const stageLabel = getTaskStageLabel(waitingRun.stageKey)
+            const stageTitle =
+              waitingRun.round > 1 ? t(`${stageLabel}（第${waitingRun.round}轮）`, `${stageLabel} (Round ${waitingRun.round})`) : stageLabel
+            waitingCard = {
+              id: `${waitingRun.stageKey}-${waitingRun.round}-${waitingRun.id}`,
+              stageRunId: waitingRun.id,
+              stageKey: waitingRun.stageKey,
+              stageLabel: stageTitle,
+              round: waitingRun.round,
+              startAt: waitingRun.startAt,
+              endAt: waitingRun.endAt,
+              resultStatus: waitingRun.resultStatus,
+              failureReason: waitingRun.failureReason,
+              durationText: formatDurationMs((waitingRun.endAt ?? Date.now()) - waitingRun.startAt),
+              artifactFiles: []
+            }
+          } catch {
+            return
+          }
+        }
+
+        if (!waitingCard) {
+          return
+        }
+
+        const cachedHumanMessages = taskHumanMessagesByTaskId[taskId] ?? []
+        const hasCachedHumanMessages = cachedHumanMessages.length > 0
+        if (
+          taskStageTraceModal.open &&
+          taskStageTraceModal.humanMode &&
+          taskStageTraceModal.taskId === taskId &&
+          taskStageTraceModal.stageRunId === waitingCard.stageRunId
+        ) {
+          focusTaskHumanInput()
+          return
+        }
+
+        setTaskStageTraceModal({
+          open: true,
+          stageRunId: waitingCard.stageRunId,
+          taskId,
+          humanMode: true,
+          stageLabel: waitingCard.stageLabel,
+          round: waitingCard.round,
+          loading: !hasCachedHumanMessages,
+          error: '',
+          messages: cachedHumanMessages
+        })
+        void refreshTaskStageTrace(waitingCard.stageRunId, hasCachedHumanMessages)
         focusTaskHumanInput()
-        return
+      } finally {
+        openingTaskHumanConversationRef.current = false
       }
-
-      setTaskStageTraceModal({
-        open: true,
-        stageRunId: waitingCard.stageRunId,
-        taskId,
-        humanMode: true,
-        stageLabel: waitingCard.stageLabel,
-        round: waitingCard.round,
-        loading: !hasCachedHumanMessages,
-        error: '',
-        messages: cachedHumanMessages
-      })
-      void refreshTaskStageTrace(waitingCard.stageRunId, hasCachedHumanMessages)
-      focusTaskHumanInput()
     },
     [activeListType, buildTaskFlowCardsByTaskId, filteredTasks, focusTaskHumanInput, openTaskDetail, refreshTaskStageTrace, t, taskHumanMessagesByTaskId, taskStageTraceModal]
   )
