@@ -2634,6 +2634,8 @@ function Workspace({
       error: '',
       messages: []
     })
+    setTaskHumanInput('')
+    setTaskHumanConversationError('')
     setTaskHumanAwaitingAssistant(null)
     setTaskTraceDetailModal({
       open: false,
