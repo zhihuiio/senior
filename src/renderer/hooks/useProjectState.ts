@@ -948,7 +948,7 @@ export function useProjectState() {
 
   const createAndProcessRequirement = useCallback(
     async (title: string, content: string, type: string, source: string) => {
-      const requirement = await createRequirementItem(title, content)
+      const requirement = await createRequirementItem(title, content, source)
 
       const processingRequirement = await applyRequirementAction({
         id: requirement.id,
@@ -969,7 +969,7 @@ export function useProjectState() {
         return createAndProcessRequirement(input.title, input.content, input.type, input.source)
       }
 
-      return createRequirementPending(input.title, input.content)
+      return createRequirementPending(input.title, input.content, input.source)
     },
     [createAndProcessRequirement, createRequirementPending]
   )
