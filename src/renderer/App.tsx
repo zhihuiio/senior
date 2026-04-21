@@ -2924,6 +2924,7 @@ function Workspace({
     async (requirementId: number, sessionId?: string) => {
       const requestSeq = requirementConversationLoadSeqRef.current + 1
       requirementConversationLoadSeqRef.current = requestSeq
+      setRequirementHumanConversationError('')
       const normalizedSessionId = sessionId?.trim()
       if (!normalizedSessionId) {
         setRequirementHumanConversationLoading(false)
@@ -2931,7 +2932,6 @@ function Workspace({
       }
 
       setRequirementHumanConversationLoading(true)
-      setRequirementHumanConversationError('')
       try {
         const data = await loadRequirementConversation(requirementId, normalizedSessionId)
         if (requirementConversationLoadSeqRef.current !== requestSeq) {
