@@ -1317,6 +1317,7 @@ function Workspace({
   const openingTaskHumanConversationRef = useRef(false)
   const requirementStageTraceMessagesContainerRef = useRef<HTMLDivElement | null>(null)
   const requirementHumanInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const openingRequirementHumanConversationRef = useRef(false)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const sidebarTransitionEnableRafRef = useRef<number | null>(null)
   const [taskStageTraceModal, setTaskStageTraceModal] = useState<TaskStageTraceModalState>({
@@ -2547,56 +2548,66 @@ function Workspace({
         return
       }
 
-      if (selectedRequirement?.id !== requirementId) {
-        selectRequirement(requirementId)
+      if (openingRequirementHumanConversationRef.current) {
+        return
       }
 
+      openingRequirementHumanConversationRef.current = true
+
       try {
-        const stageRuns = await listRequirementStageRuns({ requirementId })
-        setRequirementStageRunsByRequirementId((prev) => ({
-          ...prev,
-          [requirementId]: stageRuns
-        }))
-
-        const waitingStageRun = stageRuns.slice().reverse().find((run) => run.resultStatus === 'waiting_human')
-        if (!waitingStageRun) {
-          return
+        if (selectedRequirement?.id !== requirementId) {
+          selectRequirement(requirementId)
         }
 
-        const stageLabel = getRequirementStageLabel(waitingStageRun.stageKey)
-        const stageTitle =
-          waitingStageRun.round > 1
-            ? t(`${stageLabel}（第${waitingStageRun.round}轮）`, `${stageLabel} (Round ${waitingStageRun.round})`)
-            : stageLabel
+        try {
+          const stageRuns = await listRequirementStageRuns({ requirementId })
+          setRequirementStageRunsByRequirementId((prev) => ({
+            ...prev,
+            [requirementId]: stageRuns
+          }))
 
-        const cachedHumanMessages = requirementHumanMessagesByRequirementId[requirementId] ?? []
-        const hasCachedHumanMessages = cachedHumanMessages.length > 0
-        if (
-          requirementStageTraceModal.open &&
-          requirementStageTraceModal.humanMode &&
-          requirementStageTraceModal.requirementId === requirementId &&
-          requirementStageTraceModal.stageRunId === waitingStageRun.id
-        ) {
+          const waitingStageRun = stageRuns.slice().reverse().find((run) => run.resultStatus === 'waiting_human')
+          if (!waitingStageRun) {
+            return
+          }
+
+          const stageLabel = getRequirementStageLabel(waitingStageRun.stageKey)
+          const stageTitle =
+            waitingStageRun.round > 1
+              ? t(`${stageLabel}（第${waitingStageRun.round}轮）`, `${stageLabel} (Round ${waitingStageRun.round})`)
+              : stageLabel
+
+          const cachedHumanMessages = requirementHumanMessagesByRequirementId[requirementId] ?? []
+          const hasCachedHumanMessages = cachedHumanMessages.length > 0
+          if (
+            requirementStageTraceModal.open &&
+            requirementStageTraceModal.humanMode &&
+            requirementStageTraceModal.requirementId === requirementId &&
+            requirementStageTraceModal.stageRunId === waitingStageRun.id
+          ) {
+            focusRequirementHumanInput()
+            return
+          }
+
+          setRequirementStageTraceModal({
+            open: true,
+            stageRunId: waitingStageRun.id,
+            requirementId,
+            agentSessionId: waitingStageRun.agentSessionId,
+            humanMode: true,
+            stageLabel: stageTitle,
+            round: waitingStageRun.round,
+            loading: !hasCachedHumanMessages,
+            error: '',
+            messages: cachedHumanMessages
+          })
+          void refreshRequirementStageTrace(waitingStageRun.id, hasCachedHumanMessages)
           focusRequirementHumanInput()
-          return
+        } catch {
+          // ignore; timeline refresh fallback already handled elsewhere
         }
-
-        setRequirementStageTraceModal({
-          open: true,
-          stageRunId: waitingStageRun.id,
-          requirementId,
-          agentSessionId: waitingStageRun.agentSessionId,
-          humanMode: true,
-          stageLabel: stageTitle,
-          round: waitingStageRun.round,
-          loading: !hasCachedHumanMessages,
-          error: '',
-          messages: cachedHumanMessages
-        })
-        void refreshRequirementStageTrace(waitingStageRun.id, hasCachedHumanMessages)
-        focusRequirementHumanInput()
-      } catch {
-        // ignore; timeline refresh fallback already handled elsewhere
+      } finally {
+        openingRequirementHumanConversationRef.current = false
       }
     },
     [
