@@ -1318,6 +1318,7 @@ function Workspace({
   const requirementStageTraceMessagesContainerRef = useRef<HTMLDivElement | null>(null)
   const requirementHumanInputRef = useRef<HTMLTextAreaElement | null>(null)
   const openingRequirementHumanConversationRef = useRef(false)
+  const requirementConversationLoadSeqRef = useRef(0)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const sidebarTransitionEnableRafRef = useRef<number | null>(null)
   const [taskStageTraceModal, setTaskStageTraceModal] = useState<TaskStageTraceModalState>({
@@ -2921,8 +2922,11 @@ function Workspace({
 
   const loadRequirementHumanConversation = useCallback(
     async (requirementId: number, sessionId?: string) => {
+      const requestSeq = requirementConversationLoadSeqRef.current + 1
+      requirementConversationLoadSeqRef.current = requestSeq
       const normalizedSessionId = sessionId?.trim()
       if (!normalizedSessionId) {
+        setRequirementHumanConversationLoading(false)
         return
       }
 
@@ -2930,6 +2934,9 @@ function Workspace({
       setRequirementHumanConversationError('')
       try {
         const data = await loadRequirementConversation(requirementId, normalizedSessionId)
+        if (requirementConversationLoadSeqRef.current !== requestSeq) {
+          return
+        }
         const converted: TaskAgentTraceMessage[] = data.messages.map((message) => ({
           id: message.id,
           role: message.role === 'assistant' ? 'assistant' : message.role === 'user' ? 'user' : 'system',
@@ -2941,9 +2948,14 @@ function Workspace({
           [requirementId]: mergeTaskHumanMessages(prev[requirementId] ?? [], converted)
         }))
       } catch (error) {
+        if (requirementConversationLoadSeqRef.current !== requestSeq) {
+          return
+        }
         setRequirementHumanConversationError(error instanceof Error ? error.message : pickText('读取人工会话失败', 'Failed to load human conversation'))
       } finally {
-        setRequirementHumanConversationLoading(false)
+        if (requirementConversationLoadSeqRef.current === requestSeq) {
+          setRequirementHumanConversationLoading(false)
+        }
       }
     },
     [loadRequirementConversation]
