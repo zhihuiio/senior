@@ -2729,7 +2729,8 @@ function Workspace({
             resultStatus: latestStageRun.resultStatus,
             failureReason: latestStageRun.failureReason,
             durationText: formatDurationMs((latestStageRun.endAt ?? Date.now()) - latestStageRun.startAt),
-            agentSessionId: latestStageRun.agentSessionId
+            agentSessionId: latestStageRun.agentSessionId,
+            artifactFiles: []
           },
           requirementId
         )
@@ -3166,9 +3167,9 @@ function Workspace({
         requirements.map(async (requirement) => {
           try {
             const stageRuns = await listRequirementStageRuns({ requirementId: requirement.id })
-            return [requirement.id, stageRuns] as const
+            return [requirement.id, stageRuns] as [number, RequirementStageRun[]]
           } catch {
-            return [requirement.id, []] as const
+            return [requirement.id, []] as [number, RequirementStageRun[]]
           }
         })
       )
@@ -3186,9 +3187,9 @@ function Workspace({
         projectTasks.map(async (task) => {
           try {
             const stageRuns = await listTaskStageRuns({ taskId: task.id })
-            return [task.id, stageRuns] as const
+            return [task.id, stageRuns] as [number, TaskStageRun[]]
           } catch {
-            return [task.id, []] as const
+            return [task.id, []] as [number, TaskStageRun[]]
           }
         })
       )
@@ -4482,7 +4483,7 @@ function Workspace({
                   <button
                     type="button"
                     aria-pressed={isRunning}
-                    aria-label={`${card.title} ${isRunning ? 'running' : 'stopped'}`}
+                    aria-label={`${language === 'en-US' ? card.titleEn : card.titleZh} ${isRunning ? 'running' : 'stopped'}`}
                     disabled={isToggleDisabled}
                     onClick={(event) => {
                       event.stopPropagation()
