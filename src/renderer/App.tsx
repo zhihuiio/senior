@@ -2863,7 +2863,7 @@ function Workspace({
   }
 
   const onSendTaskHumanConversation = async () => {
-    if (!selectedTask || !selectedTask.waitingContext) {
+    if (taskHumanConversationLoading || !selectedTask || !selectedTask.waitingContext) {
       return
     }
 
@@ -2902,7 +2902,7 @@ function Workspace({
   }
 
   const onConfirmTaskHuman = async () => {
-    if (!selectedTask || !selectedTask.waitingContext) {
+    if (taskHumanConversationLoading || !selectedTask || !selectedTask.waitingContext) {
       return
     }
 
@@ -2972,7 +2972,7 @@ function Workspace({
   ])
 
   const onSendRequirementHumanConversation = async () => {
-    if (!selectedRequirement || selectedRequirement.waitingContext !== 'prd_review_gate') {
+    if (requirementHumanConversationLoading || !selectedRequirement || selectedRequirement.waitingContext !== 'prd_review_gate') {
       return
     }
 
@@ -3015,7 +3015,7 @@ function Workspace({
   }
 
   const onConfirmRequirementHuman = async () => {
-    if (!selectedRequirement || selectedRequirement.waitingContext !== 'prd_review_gate') {
+    if (requirementHumanConversationLoading || !selectedRequirement || selectedRequirement.waitingContext !== 'prd_review_gate') {
       return
     }
 
@@ -3043,7 +3043,7 @@ function Workspace({
   }
 
   const onCancelTaskHuman = async () => {
-    if (!selectedTask || !selectedTask.waitingContext) {
+    if (taskHumanConversationLoading || !selectedTask || !selectedTask.waitingContext) {
       return
     }
 
