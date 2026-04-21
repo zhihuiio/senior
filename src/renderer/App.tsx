@@ -1898,6 +1898,7 @@ function Workspace({
       !selectedTaskId ||
       !isTaskInWaitingHumanGate(selectedTaskWaitingContext) ||
       !taskStageTraceModal.open ||
+      !taskStageTraceModal.humanMode ||
       taskStageTraceModal.taskId !== selectedTaskId
     ) {
       return
@@ -1935,7 +1936,7 @@ function Workspace({
     return () => {
       cancelled = true
     }
-  }, [loadTaskHumanConversation, selectedTaskId, selectedTaskWaitingContext, taskStageTraceModal.open, taskStageTraceModal.taskId])
+  }, [loadTaskHumanConversation, selectedTaskId, selectedTaskWaitingContext, taskStageTraceModal.humanMode, taskStageTraceModal.open, taskStageTraceModal.taskId])
 
   useEffect(() => {
     if (!hasRunningStageCard) {
