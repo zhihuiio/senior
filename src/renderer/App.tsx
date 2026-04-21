@@ -1639,10 +1639,10 @@ function Workspace({
   }, [requirementStageRunsByRequirementId, selectedRequirement])
 
   useEffect(() => {
-    if (!selectedRequirement) {
+    if (activeListType === 'requirement' && !selectedRequirement) {
       setIsDetailVisible(false)
     }
-  }, [selectedRequirement])
+  }, [activeListType, selectedRequirement])
 
   useEffect(() => {
     if (activeListType !== 'task') {
