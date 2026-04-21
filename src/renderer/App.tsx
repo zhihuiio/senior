@@ -2441,7 +2441,7 @@ function Workspace({
   }, [])
 
   const openTaskHumanConversation = useCallback(
-    (taskId: number) => {
+    async (taskId: number) => {
       if (activeListType !== 'task') {
         return
       }
@@ -2454,11 +2454,47 @@ function Workspace({
       }
 
       const waitingStageKey = waitingContext === 'coding_gate' ? 'coding' : 'arch_designing'
-      const waitingCard = buildTaskFlowCardsByTaskId(taskId)
+      let waitingCard = buildTaskFlowCardsByTaskId(taskId)
         .filter((item) => item.stageKey === waitingStageKey)
         .slice()
         .reverse()
         .find((item) => item.resultStatus === 'waiting_human')
+
+      if (!waitingCard) {
+        try {
+          const stageRuns = await listTaskStageRuns({ taskId })
+          setTaskStageRunsByTaskId((prev) => ({
+            ...prev,
+            [taskId]: stageRuns
+          }))
+          const waitingRun = stageRuns
+            .filter((run) => run.stageKey === waitingStageKey && run.resultStatus === 'waiting_human')
+            .slice()
+            .reverse()[0]
+          if (!waitingRun) {
+            return
+          }
+          const stageLabel = getTaskStageLabel(waitingRun.stageKey)
+          const stageTitle =
+            waitingRun.round > 1 ? t(`${stageLabel}（第${waitingRun.round}轮）`, `${stageLabel} (Round ${waitingRun.round})`) : stageLabel
+          waitingCard = {
+            id: `${waitingRun.stageKey}-${waitingRun.round}-${waitingRun.id}`,
+            stageRunId: waitingRun.id,
+            stageKey: waitingRun.stageKey,
+            stageLabel: stageTitle,
+            round: waitingRun.round,
+            startAt: waitingRun.startAt,
+            endAt: waitingRun.endAt,
+            resultStatus: waitingRun.resultStatus,
+            failureReason: waitingRun.failureReason,
+            durationText: formatDurationMs((waitingRun.endAt ?? Date.now()) - waitingRun.startAt),
+            artifactFiles: []
+          }
+        } catch {
+          return
+        }
+      }
+
       if (!waitingCard) {
         return
       }
@@ -2489,7 +2525,7 @@ function Workspace({
       void refreshTaskStageTrace(waitingCard.stageRunId, hasCachedHumanMessages)
       focusTaskHumanInput()
     },
-    [activeListType, buildTaskFlowCardsByTaskId, filteredTasks, focusTaskHumanInput, openTaskDetail, refreshTaskStageTrace, taskHumanMessagesByTaskId, taskStageTraceModal]
+    [activeListType, buildTaskFlowCardsByTaskId, filteredTasks, focusTaskHumanInput, openTaskDetail, refreshTaskStageTrace, t, taskHumanMessagesByTaskId, taskStageTraceModal]
   )
 
   const openRequirementHumanConversation = useCallback(
