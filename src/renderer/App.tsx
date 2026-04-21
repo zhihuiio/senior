@@ -2229,37 +2229,43 @@ function Workspace({
   const sidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : sidebarExpandedWidth
   const contentViewportWidth = viewportWidth - sidebarWidth - SIDEBAR_RESIZER_WIDTH
   const useCompactDetail = contentViewportWidth < OVERLAY_DETAIL_BREAKPOINT
+  const buildTaskFlowCardsByTaskId = useCallback(
+    (taskId: number): TaskFlowCardItem[] => {
+      const stageRuns = taskStageRunsByTaskId[taskId] ?? []
+      const artifactFiles = taskArtifactsByTaskId[taskId] ?? []
+
+      return stageRuns
+        .filter((run) => Boolean(getTaskStageLabel(run.stageKey)))
+        .map((run) => {
+          const stageLabel = getTaskStageLabel(run.stageKey)
+          const stageTitle = run.round > 1 ? t(`${stageLabel}（第${run.round}轮）`, `${stageLabel} (Round ${run.round})`) : stageLabel
+          const stageArtifacts = artifactFiles.filter((file) => run.artifactFileNames.includes(file.fileName))
+          const endAt = run.endAt
+          const duration = (endAt ?? taskDurationNowMs) - run.startAt
+          return {
+            id: `${run.stageKey}-${run.round}-${run.id}`,
+            stageRunId: run.id,
+            stageKey: run.stageKey,
+            stageLabel: stageTitle,
+            round: run.round,
+            startAt: run.startAt,
+            endAt,
+            resultStatus: run.resultStatus,
+            failureReason: run.failureReason,
+            durationText: formatDurationMs(duration),
+            artifactFiles: stageArtifacts
+          }
+        })
+    },
+    [t, taskArtifactsByTaskId, taskDurationNowMs, taskStageRunsByTaskId]
+  )
   const selectedTaskFlowCards = useMemo<TaskFlowCardItem[]>(() => {
     if (!selectedTask) {
       return []
     }
 
-    const stageRuns = taskStageRunsByTaskId[selectedTask.id] ?? []
-    const artifactFiles = taskArtifactsByTaskId[selectedTask.id] ?? []
-
-    return stageRuns
-      .filter((run) => Boolean(getTaskStageLabel(run.stageKey)))
-      .map((run) => {
-        const stageLabel = getTaskStageLabel(run.stageKey)
-        const stageTitle = run.round > 1 ? t(`${stageLabel}（第${run.round}轮）`, `${stageLabel} (Round ${run.round})`) : stageLabel
-        const stageArtifacts = artifactFiles.filter((file) => run.artifactFileNames.includes(file.fileName))
-        const endAt = run.endAt
-        const duration = (endAt ?? taskDurationNowMs) - run.startAt
-        return {
-          id: `${run.stageKey}-${run.round}-${run.id}`,
-          stageRunId: run.id,
-          stageKey: run.stageKey,
-          stageLabel: stageTitle,
-          round: run.round,
-          startAt: run.startAt,
-          endAt,
-          resultStatus: run.resultStatus,
-          failureReason: run.failureReason,
-          durationText: formatDurationMs(duration),
-          artifactFiles: stageArtifacts
-        }
-      })
-  }, [selectedTask, taskArtifactsByTaskId, taskDurationNowMs, taskStageRunsByTaskId])
+    return buildTaskFlowCardsByTaskId(selectedTask.id)
+  }, [buildTaskFlowCardsByTaskId, selectedTask])
   const selectedRequirementFlowCards = useMemo<RequirementFlowCardItem[]>(() => {
     if (!selectedRequirement) {
       return []
@@ -2454,7 +2460,7 @@ function Workspace({
       }
 
       const waitingStageKey = waitingContext === 'coding_gate' ? 'coding' : 'arch_designing'
-      const waitingCard = selectedTaskFlowCards
+      const waitingCard = buildTaskFlowCardsByTaskId(taskId)
         .filter((item) => item.stageKey === waitingStageKey)
         .slice()
         .reverse()
@@ -2489,7 +2495,7 @@ function Workspace({
       void refreshTaskStageTrace(waitingCard.stageRunId, hasCachedHumanMessages)
       focusTaskHumanInput()
     },
-    [activeListType, filteredTasks, focusTaskHumanInput, openTaskDetail, refreshTaskStageTrace, selectedTaskFlowCards, taskHumanMessagesByTaskId, taskStageTraceModal]
+    [activeListType, buildTaskFlowCardsByTaskId, filteredTasks, focusTaskHumanInput, openTaskDetail, refreshTaskStageTrace, taskHumanMessagesByTaskId, taskStageTraceModal]
   )
 
   const openRequirementHumanConversation = useCallback(
