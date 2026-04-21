@@ -1315,10 +1315,12 @@ function Workspace({
   const taskStageTraceMessagesContainerRef = useRef<HTMLDivElement | null>(null)
   const taskHumanInputRef = useRef<HTMLTextAreaElement | null>(null)
   const openingTaskHumanConversationRef = useRef(false)
+  const pendingTaskHumanConversationTaskIdRef = useRef<number | null>(null)
   const taskHumanConversationContextVersionRef = useRef(0)
   const requirementStageTraceMessagesContainerRef = useRef<HTMLDivElement | null>(null)
   const requirementHumanInputRef = useRef<HTMLTextAreaElement | null>(null)
   const openingRequirementHumanConversationRef = useRef(false)
+  const pendingRequirementHumanConversationIdRef = useRef<number | null>(null)
   const requirementHumanConversationContextVersionRef = useRef(0)
   const requirementConversationLoadSeqRef = useRef(0)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
@@ -2463,9 +2465,11 @@ function Workspace({
       const openContextVersion = taskHumanConversationContextVersionRef.current
 
       if (openingTaskHumanConversationRef.current) {
+        pendingTaskHumanConversationTaskIdRef.current = taskId
         return
       }
 
+      pendingTaskHumanConversationTaskIdRef.current = null
       openingTaskHumanConversationRef.current = true
 
       try {
@@ -2552,6 +2556,11 @@ function Workspace({
         focusTaskHumanInput()
       } finally {
         openingTaskHumanConversationRef.current = false
+        const pendingTaskId = pendingTaskHumanConversationTaskIdRef.current
+        pendingTaskHumanConversationTaskIdRef.current = null
+        if (pendingTaskId !== null && pendingTaskId !== taskId) {
+          void openTaskHumanConversation(pendingTaskId)
+        }
       }
     },
     [activeListType, buildTaskFlowCardsByTaskId, filteredTasks, focusTaskHumanInput, openTaskDetail, refreshTaskStageTrace, t, taskHumanMessagesByTaskId, taskStageTraceModal]
@@ -2565,9 +2574,11 @@ function Workspace({
       const openContextVersion = requirementHumanConversationContextVersionRef.current
 
       if (openingRequirementHumanConversationRef.current) {
+        pendingRequirementHumanConversationIdRef.current = requirementId
         return
       }
 
+      pendingRequirementHumanConversationIdRef.current = null
       openingRequirementHumanConversationRef.current = true
 
       try {
@@ -2627,6 +2638,11 @@ function Workspace({
         }
       } finally {
         openingRequirementHumanConversationRef.current = false
+        const pendingRequirementId = pendingRequirementHumanConversationIdRef.current
+        pendingRequirementHumanConversationIdRef.current = null
+        if (pendingRequirementId !== null && pendingRequirementId !== requirementId) {
+          void openRequirementHumanConversation(pendingRequirementId)
+        }
       }
     },
     [
