@@ -1314,6 +1314,8 @@ function Workspace({
   const clarifyMessagesContainerRef = useRef<HTMLDivElement | null>(null)
   const taskStageTraceMessagesContainerRef = useRef<HTMLDivElement | null>(null)
   const taskHumanInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const requirementStageTraceMessagesContainerRef = useRef<HTMLDivElement | null>(null)
+  const requirementHumanInputRef = useRef<HTMLTextAreaElement | null>(null)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const sidebarTransitionEnableRafRef = useRef<number | null>(null)
   const [taskStageTraceModal, setTaskStageTraceModal] = useState<TaskStageTraceModalState>({
@@ -2432,6 +2434,12 @@ function Workspace({
     })
   }, [])
 
+  const focusRequirementHumanInput = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      requirementHumanInputRef.current?.focus()
+    })
+  }, [])
+
   const openTaskHumanConversation = useCallback(
     (taskId: number) => {
       if (activeListType !== 'task') {
@@ -2520,7 +2528,7 @@ function Workspace({
           requirementStageTraceModal.requirementId === requirementId &&
           requirementStageTraceModal.stageRunId === waitingStageRun.id
         ) {
-          focusTaskHumanInput()
+          focusRequirementHumanInput()
           return
         }
 
@@ -2537,14 +2545,14 @@ function Workspace({
           messages: cachedHumanMessages
         })
         void refreshRequirementStageTrace(waitingStageRun.id, hasCachedHumanMessages)
-        focusTaskHumanInput()
+        focusRequirementHumanInput()
       } catch {
         // ignore; timeline refresh fallback already handled elsewhere
       }
     },
     [
       activeListType,
-      focusTaskHumanInput,
+      focusRequirementHumanInput,
       refreshRequirementStageTrace,
       requirementHumanMessagesByRequirementId,
       requirementStageTraceModal,
@@ -2582,6 +2590,16 @@ function Workspace({
     })
   }
 
+  const scrollRequirementStageTraceMessagesToBottom = () => {
+    window.requestAnimationFrame(() => {
+      const node = requirementStageTraceMessagesContainerRef.current
+      if (!node) {
+        return
+      }
+      node.scrollTop = node.scrollHeight
+    })
+  }
+
   useEffect(() => {
     if (!taskStageTraceModal.open) {
       return
@@ -2595,7 +2613,7 @@ function Workspace({
       return
     }
 
-    scrollTaskStageTraceMessagesToBottom()
+    scrollRequirementStageTraceMessagesToBottom()
   }, [requirementStageTraceModal.open, requirementStageTraceModal.messages, requirementStageTraceModal.loading, requirementStageTraceModal.error])
 
   const closeTaskStageTraceModal = () => {
@@ -2691,7 +2709,7 @@ function Workspace({
     })
     void refreshRequirementStageTrace(card.stageRunId)
     if (card.resultStatus === 'waiting_human') {
-      focusTaskHumanInput()
+      focusRequirementHumanInput()
     }
   }
 
@@ -3781,7 +3799,7 @@ function Workspace({
                   </div>
 
                   <div
-                    ref={taskStageTraceMessagesContainerRef}
+                    ref={requirementStageTraceMessagesContainerRef}
                     className={cn(
                       'min-h-0 flex-1 space-y-3 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(241,245,249,0.8),_rgba(248,250,252,0.95)_42%,_rgba(255,255,255,1)_100%)] p-4',
                       taskTraceIsWaitingHumanMode ? 'pb-1' : null
@@ -3981,7 +3999,7 @@ function Workspace({
                       <div className="mt-2 space-y-2">
                         <Textarea
                           rows={3}
-                          ref={taskHumanInputRef}
+                          ref={requirementHumanInputRef}
                           value={taskHumanInput}
                           onChange={(event) => setTaskHumanInput(event.target.value)}
                           placeholder={t('输入补充说明，Agent 会在当前执行节点继续修正产物。', 'Enter supplemental instructions. Agent will keep refining artifacts in the current stage.')}
