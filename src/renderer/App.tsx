@@ -2827,6 +2827,7 @@ function Workspace({
       }))
     } catch (error) {
       setTaskHumanAwaitingAssistant(null)
+      setTaskHumanInput(message)
       setTaskHumanConversationError(error instanceof Error ? error.message : pickText('人工会话回复失败', 'Failed to reply in human conversation'))
     } finally {
       setTaskHumanConversationLoading(false)
@@ -2939,6 +2940,7 @@ function Workspace({
       }))
     } catch (error) {
       setRequirementHumanAwaitingAssistant(null)
+      setRequirementHumanInput(message)
       setRequirementHumanConversationError(error instanceof Error ? error.message : pickText('人工会话回复失败', 'Failed to reply in human conversation'))
     } finally {
       setRequirementHumanConversationLoading(false)
