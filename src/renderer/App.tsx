@@ -3899,7 +3899,7 @@ function Workspace({
                   </div>
 
                   <div
-                    ref={requirementStageTraceMessagesContainerRef}
+                    ref={taskStageTraceMessagesContainerRef}
                     className={cn(
                       'min-h-0 flex-1 space-y-3 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(241,245,249,0.8),_rgba(248,250,252,0.95)_42%,_rgba(255,255,255,1)_100%)] p-4',
                       taskTraceIsWaitingHumanMode ? 'pb-1' : null
