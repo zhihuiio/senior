@@ -170,10 +170,7 @@ export function useProjectState() {
   const loadTasksByRequirementSeqByIdRef = useRef<Record<number, number>>({})
   const loadRequirementConversationSeqByIdRef = useRef<Record<number, number>>({})
   const foregroundRequirementConversationLoadSeqRef = useRef(0)
-
-  useEffect(() => {
-    selectedProjectIdRef.current = selectedProjectId
-  }, [selectedProjectId])
+  selectedProjectIdRef.current = selectedProjectId
 
   const loadProjects = useCallback(async () => {
     try {
