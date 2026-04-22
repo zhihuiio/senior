@@ -376,39 +376,18 @@ export function useProjectState() {
 
     let cancelled = false
 
-    const run = async () => {
-      try {
-        const [list, projectTasksRaw] = await Promise.all([listRequirementsByProject(selectedProjectId), listTasksByProject(selectedProjectId)])
-        if (cancelled) {
-          return
-        }
-
-        hydrateProjectData({
-          projectId: selectedProjectId,
-          requirements: list,
-          projectTasksRaw,
-          requirementStatusFilter,
-          setRequirements,
-          setTasksByProjectId,
-          setTasksByRequirementId,
-          setSelectedRequirementId
-        })
-        setError('')
-      } catch (e) {
-        if (cancelled) {
-          return
-        }
-
-        setError(e instanceof Error ? e.message : pickText('读取需求失败', 'Failed to load requirements'))
+    void loadRequirements(selectedProjectId).catch((e) => {
+      if (cancelled) {
+        return
       }
-    }
 
-    void run()
+      setError(e instanceof Error ? e.message : pickText('读取需求失败', 'Failed to load requirements'))
+    })
 
     return () => {
       cancelled = true
     }
-  }, [selectedProjectId, requirementStatusFilter])
+  }, [loadRequirements, selectedProjectId])
 
   useEffect(() => {
     if (!window.api || typeof window.api.onRequirementStatusChanged !== 'function') {
