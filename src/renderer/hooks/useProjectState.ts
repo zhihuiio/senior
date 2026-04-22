@@ -166,6 +166,7 @@ export function useProjectState() {
   const [taskAutoProcessorLoading, setTaskAutoProcessorLoading] = useState(false)
   const [clarifyMessagesByRequirementId, setClarifyMessagesByRequirementId] = useState<Record<number, RequirementConversationMessage[]>>({})
   const selectedProjectIdRef = useRef<number | null>(null)
+  const loadProjectsSeqRef = useRef(0)
   const loadRequirementsSeqRef = useRef(0)
   const loadTasksByRequirementSeqByIdRef = useRef<Record<number, number>>({})
   const loadRequirementConversationSeqByIdRef = useRef<Record<number, number>>({})
@@ -173,8 +174,13 @@ export function useProjectState() {
   selectedProjectIdRef.current = selectedProjectId
 
   const loadProjects = useCallback(async () => {
+    const requestSeq = loadProjectsSeqRef.current + 1
+    loadProjectsSeqRef.current = requestSeq
     try {
       const list = await fetchProjects()
+      if (loadProjectsSeqRef.current !== requestSeq) {
+        return
+      }
       setProjects(list)
       setError('')
 
