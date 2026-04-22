@@ -236,14 +236,21 @@ export function useProjectState() {
       ...loadTasksByRequirementSeqByIdRef.current,
       [requirementId]: requestSeq
     }
-    const tasks = await listTasksByRequirement(requirementId)
-    if ((loadTasksByRequirementSeqByIdRef.current[requirementId] ?? 0) !== requestSeq) {
-      return
+    try {
+      const tasks = await listTasksByRequirement(requirementId)
+      if ((loadTasksByRequirementSeqByIdRef.current[requirementId] ?? 0) !== requestSeq) {
+        return
+      }
+      setTasksByRequirementId((prev) => ({
+        ...prev,
+        [requirementId]: normalizeTaskListView(tasks)
+      }))
+    } catch (error) {
+      if ((loadTasksByRequirementSeqByIdRef.current[requirementId] ?? 0) !== requestSeq) {
+        return
+      }
+      throw error
     }
-    setTasksByRequirementId((prev) => ({
-      ...prev,
-      [requirementId]: normalizeTaskListView(tasks)
-    }))
   }, [])
 
   const syncAutoProcessorStatus = useCallback(async () => {
