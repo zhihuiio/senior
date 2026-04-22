@@ -794,7 +794,8 @@ export function useProjectState() {
 
   const createRequirementItem = useCallback(
     async (title: string, content?: string, source?: string, projectId?: number): Promise<Requirement> => {
-      const targetProjectId = projectId ?? selectedProjectId
+      const currentSelectedProjectId = selectedProjectIdRef.current
+      const targetProjectId = projectId ?? currentSelectedProjectId
       if (!targetProjectId) {
         throw new Error(pickText('请先选择项目', 'Please select a project first'))
       }
@@ -815,7 +816,7 @@ export function useProjectState() {
           source: source?.trim() ?? ''
         })
 
-        if (targetProjectId === selectedProjectId) {
+        if (targetProjectId === selectedProjectIdRef.current) {
           setRequirements((prev) => [requirement, ...prev])
           setTasksByRequirementId((prev) => ({
             ...prev,
@@ -833,7 +834,7 @@ export function useProjectState() {
         setLoading(false)
       }
     },
-    [selectedProjectId]
+    []
   )
 
   const createRequirementPending = useCallback(
