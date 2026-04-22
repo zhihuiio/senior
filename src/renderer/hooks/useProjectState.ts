@@ -559,18 +559,19 @@ export function useProjectState() {
         })
       }
 
-      if (selectedProjectId && task.projectId === selectedProjectId) {
+      const currentSelectedProjectId = selectedProjectIdRef.current
+      if (currentSelectedProjectId && task.projectId === currentSelectedProjectId) {
         setTasksByProjectId((prev) => {
-          const list = prev[selectedProjectId] ?? []
+          const list = prev[currentSelectedProjectId] ?? []
           const exists = list.some((item) => item.id === task.id)
           return {
             ...prev,
-            [selectedProjectId]: exists ? list.map((item) => (item.id === task.id ? task : item)) : [task, ...list]
+            [currentSelectedProjectId]: exists ? list.map((item) => (item.id === task.id ? task : item)) : [task, ...list]
           }
         })
       }
     },
-    [selectedProjectId]
+    []
   )
 
   const createTaskItem = useCallback(
