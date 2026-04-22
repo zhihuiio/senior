@@ -167,6 +167,9 @@ export function useProjectState() {
   const [clarifyMessagesByRequirementId, setClarifyMessagesByRequirementId] = useState<Record<number, RequirementConversationMessage[]>>({})
   const selectedProjectIdRef = useRef<number | null>(null)
   const loadRequirementsSeqRef = useRef(0)
+  const loadTasksByRequirementSeqByIdRef = useRef<Record<number, number>>({})
+  const loadRequirementConversationSeqByIdRef = useRef<Record<number, number>>({})
+  const foregroundRequirementConversationLoadSeqRef = useRef(0)
 
   useEffect(() => {
     selectedProjectIdRef.current = selectedProjectId
@@ -215,7 +218,15 @@ export function useProjectState() {
   )
 
   const loadTasksByRequirement = useCallback(async (requirementId: number) => {
+    const requestSeq = (loadTasksByRequirementSeqByIdRef.current[requirementId] ?? 0) + 1
+    loadTasksByRequirementSeqByIdRef.current = {
+      ...loadTasksByRequirementSeqByIdRef.current,
+      [requirementId]: requestSeq
+    }
     const tasks = await listTasksByRequirement(requirementId)
+    if ((loadTasksByRequirementSeqByIdRef.current[requirementId] ?? 0) !== requestSeq) {
+      return
+    }
     setTasksByRequirementId((prev) => ({
       ...prev,
       [requirementId]: normalizeTaskListView(tasks)
@@ -869,14 +880,26 @@ export function useProjectState() {
     sessionId?: string,
     options?: { background?: boolean }
   ) => {
+    const requestSeq = (loadRequirementConversationSeqByIdRef.current[requirementId] ?? 0) + 1
+    loadRequirementConversationSeqByIdRef.current = {
+      ...loadRequirementConversationSeqByIdRef.current,
+      [requirementId]: requestSeq
+    }
+
     const shouldManageGlobalLoading = !options?.background
+    let foregroundLoadingSeq: number | null = null
     if (shouldManageGlobalLoading) {
+      foregroundLoadingSeq = foregroundRequirementConversationLoadSeqRef.current + 1
+      foregroundRequirementConversationLoadSeqRef.current = foregroundLoadingSeq
       setLoading(true)
       setError('')
     }
 
     try {
       const data = await getRequirementConversation(requirementId, { sessionId })
+      if ((loadRequirementConversationSeqByIdRef.current[requirementId] ?? 0) !== requestSeq) {
+        return data
+      }
       setClarifyMessagesByRequirementId((prev) => ({
         ...prev,
         [requirementId]: data.messages
@@ -885,12 +908,16 @@ export function useProjectState() {
       return data
     } catch (e) {
       const message = e instanceof Error ? e.message : pickText('读取会话失败', 'Failed to load conversation')
-      if (shouldManageGlobalLoading) {
+      if (shouldManageGlobalLoading && (loadRequirementConversationSeqByIdRef.current[requirementId] ?? 0) === requestSeq) {
         setError(message)
       }
       throw new Error(message)
     } finally {
-      if (shouldManageGlobalLoading) {
+      if (
+        shouldManageGlobalLoading &&
+        foregroundLoadingSeq !== null &&
+        foregroundRequirementConversationLoadSeqRef.current === foregroundLoadingSeq
+      ) {
         setLoading(false)
       }
     }
