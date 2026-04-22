@@ -192,6 +192,9 @@ export function useProjectState() {
         return list.length > 0 ? list[0].id : null
       })
     } catch (e) {
+      if (loadProjectsSeqRef.current !== requestSeq) {
+        return
+      }
       setError(e instanceof Error ? e.message : pickText('读取项目失败', 'Failed to load projects'))
     }
   }, [])
