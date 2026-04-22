@@ -409,7 +409,8 @@ export function useProjectState() {
     let pending = false
 
     const refresh = () => {
-      if (!selectedProjectId) {
+      const currentSelectedProjectId = selectedProjectIdRef.current
+      if (!currentSelectedProjectId) {
         return
       }
 
@@ -419,7 +420,7 @@ export function useProjectState() {
       }
 
       inFlight = true
-      void loadRequirements(selectedProjectId)
+      void loadRequirements(currentSelectedProjectId)
         .catch(() => {
           // ignore push-refresh errors; user interactions will surface meaningful errors
         })
@@ -433,7 +434,8 @@ export function useProjectState() {
     }
 
     const unsubscribe = window.api.onRequirementStatusChanged((event) => {
-      if (!selectedProjectId || event.projectId !== selectedProjectId) {
+      const currentSelectedProjectId = selectedProjectIdRef.current
+      if (!currentSelectedProjectId || event.projectId !== currentSelectedProjectId) {
         return
       }
 
@@ -443,7 +445,7 @@ export function useProjectState() {
     return () => {
       unsubscribe()
     }
-  }, [selectedProjectId, loadRequirements])
+  }, [loadRequirements])
 
   useEffect(() => {
     if (!window.api || typeof window.api.onTaskStatusChanged !== 'function') {
@@ -454,7 +456,8 @@ export function useProjectState() {
     let pending = false
 
     const refresh = () => {
-      if (!selectedProjectId) {
+      const currentSelectedProjectId = selectedProjectIdRef.current
+      if (!currentSelectedProjectId) {
         return
       }
 
@@ -464,7 +467,7 @@ export function useProjectState() {
       }
 
       inFlight = true
-      void loadRequirements(selectedProjectId)
+      void loadRequirements(currentSelectedProjectId)
         .catch(() => {
           // ignore push-refresh errors; user interactions will surface meaningful errors
         })
@@ -478,7 +481,8 @@ export function useProjectState() {
     }
 
     const unsubscribe = window.api.onTaskStatusChanged((event) => {
-      if (!selectedProjectId || event.projectId !== selectedProjectId) {
+      const currentSelectedProjectId = selectedProjectIdRef.current
+      if (!currentSelectedProjectId || event.projectId !== currentSelectedProjectId) {
         return
       }
 
@@ -488,7 +492,7 @@ export function useProjectState() {
     return () => {
       unsubscribe()
     }
-  }, [selectedProjectId, loadRequirements])
+  }, [loadRequirements])
 
   useEffect(() => {
     if (!selectedRequirementId) {
