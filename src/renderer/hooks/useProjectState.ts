@@ -203,22 +203,29 @@ export function useProjectState() {
     async (projectId: number) => {
       const requestSeq = loadRequirementsSeqRef.current + 1
       loadRequirementsSeqRef.current = requestSeq
-      const [list, projectTasksRaw] = await Promise.all([listRequirementsByProject(projectId), listTasksByProject(projectId)])
-      if (selectedProjectIdRef.current !== projectId || loadRequirementsSeqRef.current !== requestSeq) {
-        return
-      }
+      try {
+        const [list, projectTasksRaw] = await Promise.all([listRequirementsByProject(projectId), listTasksByProject(projectId)])
+        if (selectedProjectIdRef.current !== projectId || loadRequirementsSeqRef.current !== requestSeq) {
+          return
+        }
 
-      hydrateProjectData({
-        projectId,
-        requirements: list,
-        projectTasksRaw,
-        requirementStatusFilter,
-        setRequirements,
-        setTasksByProjectId,
-        setTasksByRequirementId,
-        setSelectedRequirementId
-      })
-      setError('')
+        hydrateProjectData({
+          projectId,
+          requirements: list,
+          projectTasksRaw,
+          requirementStatusFilter,
+          setRequirements,
+          setTasksByProjectId,
+          setTasksByRequirementId,
+          setSelectedRequirementId
+        })
+        setError('')
+      } catch (error) {
+        if (selectedProjectIdRef.current !== projectId || loadRequirementsSeqRef.current !== requestSeq) {
+          return
+        }
+        throw error
+      }
     },
     [requirementStatusFilter]
   )
