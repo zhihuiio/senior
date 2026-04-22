@@ -264,8 +264,9 @@ export function useProjectState() {
       const data = await startRequirementAutoProcessor()
       setAutoProcessorRunning(data.running)
       setAutoProcessorStartedAt(data.startedAt)
-      if (selectedProjectId) {
-        await loadRequirements(selectedProjectId)
+      const currentSelectedProjectId = selectedProjectIdRef.current
+      if (currentSelectedProjectId) {
+        await loadRequirements(currentSelectedProjectId)
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : pickText('启动自动处理失败', 'Failed to start auto-processor')
@@ -274,7 +275,7 @@ export function useProjectState() {
     } finally {
       setAutoProcessorLoading(false)
     }
-  }, [loadRequirements, selectedProjectId])
+  }, [loadRequirements])
 
   const stopAutoProcessor = useCallback(async () => {
     setAutoProcessorLoading(true)
@@ -285,8 +286,9 @@ export function useProjectState() {
       setAutoProcessorRunning(data.running)
       setAutoProcessorStartedAt(data.startedAt)
 
-      if (selectedProjectId) {
-        await loadRequirements(selectedProjectId)
+      const currentSelectedProjectId = selectedProjectIdRef.current
+      if (currentSelectedProjectId) {
+        await loadRequirements(currentSelectedProjectId)
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : pickText('关闭自动处理失败', 'Failed to stop auto-processor')
@@ -295,7 +297,7 @@ export function useProjectState() {
     } finally {
       setAutoProcessorLoading(false)
     }
-  }, [loadRequirements, selectedProjectId])
+  }, [loadRequirements])
 
   const toggleAutoProcessor = useCallback(async () => {
     if (autoProcessorRunning) {
@@ -324,8 +326,9 @@ export function useProjectState() {
       const data = await startTaskAutoProcessor()
       setTaskAutoProcessorRunning(data.running)
       setTaskAutoProcessorStartedAt(data.startedAt)
-      if (selectedProjectId) {
-        await loadRequirements(selectedProjectId)
+      const currentSelectedProjectId = selectedProjectIdRef.current
+      if (currentSelectedProjectId) {
+        await loadRequirements(currentSelectedProjectId)
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : pickText('启动任务自动处理失败', 'Failed to start task auto-processor')
@@ -334,7 +337,7 @@ export function useProjectState() {
     } finally {
       setTaskAutoProcessorLoading(false)
     }
-  }, [loadRequirements, selectedProjectId])
+  }, [loadRequirements])
 
   const stopTaskProcessor = useCallback(async () => {
     setTaskAutoProcessorLoading(true)
@@ -345,8 +348,9 @@ export function useProjectState() {
       setTaskAutoProcessorRunning(data.running)
       setTaskAutoProcessorStartedAt(data.startedAt)
 
-      if (selectedProjectId) {
-        await loadRequirements(selectedProjectId)
+      const currentSelectedProjectId = selectedProjectIdRef.current
+      if (currentSelectedProjectId) {
+        await loadRequirements(currentSelectedProjectId)
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : pickText('关闭任务自动处理失败', 'Failed to stop task auto-processor')
@@ -355,7 +359,7 @@ export function useProjectState() {
     } finally {
       setTaskAutoProcessorLoading(false)
     }
-  }, [loadRequirements, selectedProjectId])
+  }, [loadRequirements])
 
   const toggleTaskProcessor = useCallback(async () => {
     if (taskAutoProcessorRunning) {
