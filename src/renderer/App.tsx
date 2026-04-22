@@ -2828,6 +2828,9 @@ function Workspace({
 
       try {
         const stageRuns = await listRequirementStageRuns({ requirementId })
+        if (activeListTypeRef.current !== 'requirement') {
+          return
+        }
         setRequirementStageRunsByRequirementId((prev) => ({
           ...prev,
           [requirementId]: stageRuns
