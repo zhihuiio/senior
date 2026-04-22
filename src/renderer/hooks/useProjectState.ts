@@ -166,6 +166,7 @@ export function useProjectState() {
   const [taskAutoProcessorLoading, setTaskAutoProcessorLoading] = useState(false)
   const [clarifyMessagesByRequirementId, setClarifyMessagesByRequirementId] = useState<Record<number, RequirementConversationMessage[]>>({})
   const selectedProjectIdRef = useRef<number | null>(null)
+  const loadRequirementsSeqRef = useRef(0)
 
   useEffect(() => {
     selectedProjectIdRef.current = selectedProjectId
@@ -191,8 +192,10 @@ export function useProjectState() {
 
   const loadRequirements = useCallback(
     async (projectId: number) => {
+      const requestSeq = loadRequirementsSeqRef.current + 1
+      loadRequirementsSeqRef.current = requestSeq
       const [list, projectTasksRaw] = await Promise.all([listRequirementsByProject(projectId), listTasksByProject(projectId)])
-      if (selectedProjectIdRef.current !== projectId) {
+      if (selectedProjectIdRef.current !== projectId || loadRequirementsSeqRef.current !== requestSeq) {
         return
       }
 
